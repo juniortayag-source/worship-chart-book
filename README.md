@@ -14,6 +14,10 @@ your data lives in a Postgres database you control.
   it is — that's what lets "Transpose" work on an image-based chart, since
   there's no extracted text to parse automatically. There's no "view
   original PDF" feature, since the original file is never kept anywhere.
+  Drag a tagged chord to reposition it, and use the A&minus;/A+ buttons in
+  its popup to shrink or grow just that chord's label (handy on a dense
+  chart, or if the covering patch looks too big or too small once
+  transposed).
 - You can still skip PDFs entirely and type a chart by hand (**Edit song →
   "type lyrics & chords by hand"**) — that path is unchanged and doesn't need
   any chord tagging, since you're typing the chords directly.
@@ -111,6 +115,13 @@ prompt — any username works, only the password is checked. Most browsers
 remember it for the rest of that browsing session, so people won't be asked
 again every time. Leave `APP_PASSWORD` unset (or delete it and redeploy) to
 make the app public again.
+
+**Optional: a view-only password.** Add a second environment variable,
+`APP_VIEW_PASSWORD`, set to a different password. Anyone who logs in with it
+can look through every song, chart, and Sunday log, but every button that
+would change something (add, edit, delete, tag chords, log a Sunday) is
+hidden for them — and blocked on the server even if someone tried to call
+the API directly. Redeploy after adding it, same as above.
 
 ### 5. Updating later
 

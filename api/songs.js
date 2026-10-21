@@ -1,5 +1,6 @@
 const { randomUUID } = require("crypto");
 const { getPool, rowToDoc } = require("./_db");
+const { requireEditor } = require("./_auth");
 
 module.exports = async (req, res) => {
   let pool;
@@ -18,6 +19,7 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === "POST") {
+      if (!requireEditor(req, res)) return;
       const id = randomUUID();
       const data = Object.assign({}, req.body, { addedAt: new Date().toISOString() });
       await pool.query("INSERT INTO songs (id, data) VALUES ($1, $2::jsonb)", [id, JSON.stringify(data)]);

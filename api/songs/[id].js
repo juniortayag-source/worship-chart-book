@@ -1,5 +1,6 @@
 const { getPool, rowToDoc } = require("../_db");
 const { deleteBlobs, pageUrls } = require("../_blob");
+const { requireEditor } = require("../_auth");
 
 module.exports = async (req, res) => {
   let pool;
@@ -14,6 +15,7 @@ module.exports = async (req, res) => {
 
   try {
     if (req.method === "PATCH") {
+      if (!requireEditor(req, res)) return;
       const { rows } = await pool.query("SELECT data FROM songs WHERE id = $1", [id]);
       if (!rows.length) { res.status(404).json({ error: "Song not found" }); return; }
       const existing = rows[0].data;
@@ -32,6 +34,7 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === "DELETE") {
+      if (!requireEditor(req, res)) return;
       const { rows } = await pool.query("SELECT data FROM songs WHERE id = $1", [id]);
       await pool.query("DELETE FROM songs WHERE id = $1", [id]);
       if (rows.length) await deleteBlobs(pageUrls(rows[0].data && rows[0].data.pages));

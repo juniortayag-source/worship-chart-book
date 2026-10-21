@@ -3,9 +3,14 @@ const { next } = require("@vercel/functions");
 // Password-gates the whole app (every page and every /api request) using
 // plain HTTP Basic Auth, so the browser's own built-in login prompt handles
 // it — no custom login page or session/cookie code needed. Any username
-// works; only the password is checked against the APP_PASSWORD environment
-// variable. Once entered, the browser remembers it for the rest of that
-// browser session and sends it automatically with the app's own API calls.
+// works; only the password is checked.
+//
+// Two passwords are supported: APP_PASSWORD (full access) and
+// APP_VIEW_PASSWORD (view-only — can look at everything but can't save
+// changes). Whichever one matches sets an x-app-role request header
+// ("editor" or "viewer") that the API routes check before any write (see
+// api/_auth.js) — so view-only access is enforced on the server, not just
+// hidden in the UI.
 function unauthorized() {
   return new Response("Authentication required.", {
     status: 401,
@@ -15,24 +20,33 @@ function unauthorized() {
   });
 }
 
-module.exports = function middleware(request) {
-  const expected = process.env.APP_PASSWORD;
-  // If no password has been set yet, don't lock everyone out of a freshly
-  // deployed app — let requests through. Set APP_PASSWORD to turn this on.
-  if (!expected) return next();
-
-  const auth = request.headers.get("authorization") || "";
-  if (!auth.startsWith("Basic ")) return unauthorized();
-
-  let decoded;
+function passwordFromAuthHeader(auth) {
+  if (!auth || !auth.startsWith("Basic ")) return null;
   try {
-    decoded = Buffer.from(auth.slice(6), "base64").toString("utf8");
+    const decoded = Buffer.from(auth.slice(6), "base64").toString("utf8");
+    const colonIndex = decoded.indexOf(":");
+    return colonIndex === -1 ? decoded : decoded.slice(colonIndex + 1);
   } catch (e) {
-    return unauthorized();
+    return null;
   }
-  const colonIndex = decoded.indexOf(":");
-  const password = colonIndex === -1 ? decoded : decoded.slice(colonIndex + 1);
-  if (password !== expected) return unauthorized();
+}
 
-  return next();
+module.exports = function middleware(request) {
+  const editPassword = process.env.APP_PASSWORD;
+  const viewPassword = process.env.APP_VIEW_PASSWORD;
+  // If neither password has been set yet, don't lock everyone out of a
+  // freshly deployed app — let requests through.
+  if (!editPassword && !viewPassword) return next();
+
+  const password = passwordFromAuthHeader(request.headers.get("authorization"));
+  if (password == null) return unauthorized();
+
+  let role = null;
+  if (editPassword && password === editPassword) role = "editor";
+  else if (viewPassword && password === viewPassword) role = "viewer";
+  if (!role) return unauthorized();
+
+  const headers = new Headers(request.headers);
+  headers.set("x-app-role", role);
+  return next({ request: { headers: headers } });
 };

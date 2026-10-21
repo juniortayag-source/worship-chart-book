@@ -220,21 +220,29 @@
   .chord-tag {
     position: absolute; transform: translate(0, -50%); background: var(--chord); color: #fff;
     font-family: var(--font-mono); font-weight: 700; font-size: var(--chart-font-size);
-    padding: 1px 6px; border-radius: 5px; line-height: 1.5; white-space: nowrap; cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.35); z-index: 2;
+    padding: 1px 0.45em; border-radius: 5px; line-height: 1.5; white-space: nowrap; cursor: grab;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35); z-index: 2; touch-action: none;
   }
+  .chord-tag:active { cursor: grabbing; }
   .chord-tag:hover { outline: 2px solid #fff; outline-offset: 1px; }
   .chord-overlay {
     position: absolute; transform: translate(0, -50%); background: #fff; color: var(--chord);
     font-family: var(--font-mono); font-weight: 700; font-size: var(--chart-font-size);
-    padding: 0 4px; border-radius: 3px; line-height: 1.3; white-space: nowrap; pointer-events: none;
+    padding: 0 0.3em; border-radius: 3px; line-height: 1.3; white-space: nowrap; pointer-events: none;
+    text-align: center; box-sizing: border-box;
   }
   .tag-input-popover {
     position: absolute; z-index: 10; background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; box-shadow: var(--shadow); padding: 7px; display: flex; gap: 5px; align-items: center;
+    flex-wrap: wrap; max-width: 230px;
   }
-  .tag-input-popover input { width: 84px; padding: 6px 8px; }
+  .tag-input-popover input { width: 72px; padding: 6px 8px; }
+  .tag-input-popover .stepper.small button { width: 22px; height: 22px; font-size: 0.78rem; }
+  .tag-input-popover .stepper.small .val { min-width: 34px; font-size: 0.7rem; }
   .tagger-hint { color: var(--text-dim); font-size: 0.85rem; margin: 2px 0 10px; }
+
+  /* View-only accounts: hide anything that would change data */
+  body.role-viewer .editor-only { display: none !important; }
 
   /* Setlist (all songs for one Sunday, one scrollable page) */
   .setlist-song-block { margin-bottom: 30px; padding-bottom: 22px; border-bottom: 1px dashed var(--border); }
@@ -244,13 +252,22 @@
 
   /* Export to PDF via the browser's print dialog */
   @media print {
-    button, .top, .tabs, #capBanner, .controls-bar, #parseNote, .tagger-hint, #taggerPageBar { display: none !important; }
+    button, .top, .tabs, #capBanner, #viewerBanner, .controls-bar, #parseNote, .tagger-hint, #taggerPageBar { display: none !important; }
     body { padding: 0; background: #fff; }
     .wrap { max-width: none; }
     .chart-scroll { overflow: visible !important; padding-bottom: 0; }
     .chart-page-wrap, .line-pair { page-break-inside: avoid; }
     .section-header { page-break-after: avoid; }
     .setlist-song-block + .setlist-song-block { page-break-before: always; }
+    /* Each extra page-image starts fresh; the first starts wherever it
+       naturally falls so a short header above it doesn't strand it alone
+       on the next page with a near-empty page before it. */
+    .chart-page-wrap + .chart-page-wrap { page-break-before: always; }
+    /* A page-image chart already shows its own title/key — our text header
+       above it just pushes the (unbreakable) full-page image down enough
+       that it often can't fit, leaving a nearly blank page before it. */
+    .is-image-source .song-header,
+    .setlist-song-block.image-source .song-block-header { display: none !important; }
   }
 </style>
 </head>
@@ -271,6 +288,9 @@
   <div id="capBanner" class="banner warn" hidden>
     Can't reach the server right now, so songs and setlists won't load or save. Check that <code>DATABASE_URL</code> is set (see README.md) and reload.
   </div>
+  <div id="viewerBanner" class="banner" hidden>
+    You're signed in with view-only access — you can look through everything, but changes won't save.
+  </div>
 
   <div class="tabs" id="tabs">
     <button class="tab-btn active" data-tab="library">Library</button>
@@ -282,7 +302,7 @@
     <div class="row" style="margin-bottom:14px;">
       <input type="search" class="searchbar" id="librarySearch" placeholder="Search title, artist or tag…">
       <div class="spacer"></div>
-      <button class="btn primary" id="btnAddSong">+ Add song</button>
+      <button class="btn primary editor-only" id="btnAddSong">+ Add song</button>
     </div>
     <div id="songGrid" class="song-grid"></div>
     <div id="libraryEmpty" class="empty-state" hidden>
@@ -301,10 +321,10 @@
       </div>
       <div class="row">
         <span class="chip key" id="songKeyChip"></span>
-        <button class="btn ghost small" id="btnEditChords" hidden>Edit chords</button>
-        <button class="btn ghost small" id="btnEditSong">Edit song</button>
+        <button class="btn ghost small editor-only" id="btnEditChords" hidden>Edit chords</button>
+        <button class="btn ghost small editor-only" id="btnEditSong">Edit song</button>
         <button class="btn ghost small" id="btnExportSongPdf">Export PDF</button>
-        <button class="btn small" id="btnAddToSunday">+ Add to a Sunday</button>
+        <button class="btn small editor-only" id="btnAddToSunday">+ Add to a Sunday</button>
       </div>
     </div>
 
@@ -396,7 +416,7 @@
     <div class="row" style="margin-bottom:14px;">
       <h3 style="font-size:1.1rem;">Service history</h3>
       <div class="spacer"></div>
-      <button class="btn primary" id="btnLogSunday">+ Log a Sunday</button>
+      <button class="btn primary editor-only" id="btnLogSunday">+ Log a Sunday</button>
     </div>
     <div id="sundayList"></div>
     <div id="trackerEmpty" class="empty-state" hidden>
@@ -530,6 +550,22 @@
   }
   function finishInit() {
     $("statusLine").textContent = songs.length ? (songs.length + " song" + (songs.length === 1 ? "" : "s") + " in your library") : "";
+  }
+
+  // Finds out whether this visitor logged in with the full-access password
+  // or the view-only one (see middleware.js / api/whoami.js), and hides
+  // anything that would change data if they're view-only. The API routes
+  // enforce the same restriction server-side, so this is just the UI half.
+  function loadRole() {
+    return apiFetch("GET", "/api/whoami").then(function (r) {
+      state.role = (r && r.role) || "editor";
+    }).catch(function () {
+      state.role = "editor";
+    }).then(function () {
+      var isViewer = state.role === "viewer";
+      document.body.classList.toggle("role-viewer", isViewer);
+      $("viewerBanner").hidden = !isViewer;
+    });
   }
 
   /* ============================== PDF PROCESSING ============================== */
@@ -727,7 +763,7 @@
         '<div class="song-card" data-id="' + s.id + '">' +
         '<div class="card-top">' +
         '<h3 data-open="' + s.id + '">' + esc(s.title || "Untitled") + "</h3>" +
-        '<div class="menu-wrap">' +
+        '<div class="menu-wrap editor-only">' +
         '<button class="icon-btn" data-menu="' + s.id + '">&#8942;</button>' +
         "</div></div>" +
         (s.artist ? '<div class="artist">' + esc(s.artist) + "</div>" : "") +
@@ -954,6 +990,7 @@
 
     $("bpmVal").textContent = state.metroBpm;
     $("btnEditChords").hidden = s.sourceType !== "image";
+    $("view-song").classList.toggle("is-image-source", s.sourceType === "image");
 
     var note = $("parseNote");
     if (s.parseFailed) {
@@ -978,7 +1015,12 @@
       var tagsHtml = (page.tags || []).map(function (t) {
         if (!semitones) return ""; // untransposed: the printed chord on the image is already correct
         var sym = transposeChord(t.chord, semitones, preferFlats);
-        return '<span class="chord-overlay" style="left:' + t.xPct + '%;top:' + t.yPct + '%;">' + esc(sym) + "</span>";
+        var fs = "calc(var(--chart-font-size) * " + (t.size || 1) + ")";
+        // At least as wide as the longer of the original/new chord text, so
+        // a shorter replacement (e.g. "Gb" -> "F") still fully covers the
+        // original printed chord instead of leaving a sliver visible.
+        var minCh = Math.max((t.chord || "").length, sym.length) + 0.6;
+        return '<span class="chord-overlay" style="left:' + t.xPct + '%;top:' + t.yPct + '%;font-size:' + fs + ';min-width:' + minCh + 'ch;">' + esc(sym) + "</span>";
       }).join("");
       return (
         (idx > 0 ? '<div class="page-divider">Page ' + (idx + 1) + "</div>" : "") +
@@ -1019,11 +1061,48 @@
       '<div class="chart-page-wrap" id="taggerImgWrap">' +
       '<img src="' + esc(page.url) + '" draggable="false">' +
       page.tags.map(function (t) {
-        return '<div class="chord-tag" data-tagid="' + t.id + '" style="left:' + t.xPct + '%;top:' + t.yPct + '%;">' + esc(t.chord) + "</div>";
+        var fs = "calc(var(--chart-font-size) * " + (t.size || 1) + ")";
+        return '<div class="chord-tag" data-tagid="' + t.id + '" style="left:' + t.xPct + '%;top:' + t.yPct + '%;font-size:' + fs + ';">' + esc(t.chord) + "</div>";
       }).join("") +
       "</div>";
 
     var wrap = $("taggerImgWrap");
+
+    // Drag an existing tag to reposition it, without that drag also opening
+    // the edit popover (a real click, with no movement, still opens it).
+    Array.prototype.forEach.call(wrap.querySelectorAll(".chord-tag"), function (tagEl) {
+      var id = tagEl.getAttribute("data-tagid");
+      var tagObj = page.tags.find(function (t) { return t.id === id; });
+      if (!tagObj) return;
+      tagEl.addEventListener("pointerdown", function (e) {
+        if (e.button !== undefined && e.button !== 0) return;
+        var rect = wrap.getBoundingClientRect();
+        var startX = e.clientX, startY = e.clientY;
+        var startXPct = tagObj.xPct, startYPct = tagObj.yPct;
+        var dragging = false;
+        try { tagEl.setPointerCapture(e.pointerId); } catch (err) {}
+        function suppressClick(ce) { ce.stopPropagation(); ce.preventDefault(); tagEl.removeEventListener("click", suppressClick, true); }
+        function onMove(ev) {
+          var dx = ev.clientX - startX, dy = ev.clientY - startY;
+          if (!dragging && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+            dragging = true;
+            tagEl.addEventListener("click", suppressClick, true);
+          }
+          if (!dragging) return;
+          tagObj.xPct = Math.min(100, Math.max(0, startXPct + (dx / rect.width) * 100));
+          tagObj.yPct = Math.min(100, Math.max(0, startYPct + (dy / rect.height) * 100));
+          tagEl.style.left = tagObj.xPct + "%";
+          tagEl.style.top = tagObj.yPct + "%";
+        }
+        function onUp() {
+          tagEl.removeEventListener("pointermove", onMove);
+          tagEl.removeEventListener("pointerup", onUp);
+        }
+        tagEl.addEventListener("pointermove", onMove);
+        tagEl.addEventListener("pointerup", onUp);
+      });
+    });
+
     wrap.addEventListener("click", function (e) {
       var rect = wrap.getBoundingClientRect();
       var clickX = e.clientX - rect.left, clickY = e.clientY - rect.top;
@@ -1033,8 +1112,8 @@
         var id = tagEl.getAttribute("data-tagid");
         var existing = page.tags.find(function (t) { return t.id === id; });
         if (!existing) return;
-        showTagPopover(clickX, clickY, existing.chord, {
-          onSave: function (value) { existing.chord = value; renderTaggerPage(); },
+        showTagPopover(clickX, clickY, existing.chord, existing.size || 1, {
+          onSave: function (value, size) { existing.chord = value; existing.size = size; renderTaggerPage(); },
           onDelete: function () {
             page.tags = page.tags.filter(function (t) { return t.id !== id; });
             renderTaggerPage();
@@ -1044,9 +1123,9 @@
       }
       var xPct = (clickX / rect.width) * 100;
       var yPct = (clickY / rect.height) * 100;
-      showTagPopover(clickX, clickY, "", {
-        onSave: function (value) {
-          page.tags.push({ id: uid(), xPct: xPct, yPct: yPct, chord: value });
+      showTagPopover(clickX, clickY, "", 1, {
+        onSave: function (value, size) {
+          page.tags.push({ id: uid(), xPct: xPct, yPct: yPct, chord: value, size: size });
           renderTaggerPage();
         },
         onDelete: function () {},
@@ -1054,9 +1133,10 @@
     });
   }
 
-  function showTagPopover(x, y, initial, callbacks) {
+  function showTagPopover(x, y, initial, initialSize, callbacks) {
     closeTagPopover();
     var isEditing = initial !== "";
+    var size = initialSize || 1;
     var pop = document.createElement("div");
     pop.className = "tag-input-popover";
     pop.id = "tagPopover";
@@ -1064,6 +1144,11 @@
     pop.style.top = y + "px";
     pop.innerHTML =
       '<input type="text" id="tagPopInput" value="' + esc(initial) + '" placeholder="G, Am7…">' +
+      '<div class="stepper small">' +
+      '<button type="button" id="tagPopSizeDown" title="Smaller text">A&minus;</button>' +
+      '<span class="val" id="tagPopSizeVal">' + Math.round(size * 100) + '%</span>' +
+      '<button type="button" id="tagPopSizeUp" title="Larger text">A+</button>' +
+      "</div>" +
       '<button class="btn small primary" id="tagPopSave" title="Save">&#10003;</button>' +
       (isEditing ? '<button class="btn small danger" id="tagPopDelete" title="Remove">&times;</button>' : "") +
       '<button class="btn small ghost" id="tagPopCancel">Cancel</button>';
@@ -1071,11 +1156,15 @@
     pop.addEventListener("click", function (e) { e.stopPropagation(); });
     var input = $("tagPopInput");
     input.focus(); input.select();
+    var sizeVal = $("tagPopSizeVal");
+    function clampSize(n) { return Math.min(1.8, Math.max(0.6, Math.round(n * 10) / 10)); }
+    $("tagPopSizeDown").onclick = function () { size = clampSize(size - 0.1); sizeVal.textContent = Math.round(size * 100) + "%"; };
+    $("tagPopSizeUp").onclick = function () { size = clampSize(size + 0.1); sizeVal.textContent = Math.round(size * 100) + "%"; };
     function save() {
       var v = input.value.trim();
       if (!v) { closeTagPopover(); return; }
       closeTagPopover();
-      callbacks.onSave(v);
+      callbacks.onSave(v, size);
     }
     $("tagPopSave").onclick = save;
     input.addEventListener("keydown", function (e) {
@@ -1142,6 +1231,7 @@
     }
     body.innerHTML = sun.songs.map(function (entry) {
       var song = songs.find(function (s) { return s.id === entry.songId; });
+      var isImageSong = !!(song && song.sourceType === "image" && song.pages && song.pages.length);
       var titleHtml = "<h3>" + esc(entry.title || (song ? song.title : "Untitled")) + "</h3>";
       var metaBits = [];
       if (entry.key) metaBits.push("Key " + esc(entry.key));
@@ -1154,7 +1244,7 @@
       } else {
         var semitones = entry.key ? semitoneDiff(song.defaultKey, entry.key) : 0;
         var preferFlats = keyPrefersFlats(entry.key || song.defaultKey);
-        if (song.sourceType === "image" && song.pages && song.pages.length) {
+        if (isImageSong) {
           chartHtml = renderImagePages(song.pages, semitones, preferFlats);
         } else if (song.chart && song.chart.length) {
           chartHtml = renderChartLines(song.chart, semitones, preferFlats);
@@ -1162,7 +1252,9 @@
           chartHtml = '<div class="meta-line">No chart to show yet.</div>';
         }
       }
-      return '<div class="setlist-song-block">' + titleHtml + metaHtml + '<div class="chart-box">' + chartHtml + "</div></div>";
+      return '<div class="setlist-song-block' + (isImageSong ? " image-source" : "") + '">' +
+        '<div class="song-block-header">' + titleHtml + metaHtml + "</div>" +
+        '<div class="chart-box">' + chartHtml + "</div></div>";
     }).join("");
   }
 
@@ -1288,8 +1380,8 @@
         '<div class="row">' +
         (s.leader ? '<span class="chip">Led by ' + esc(s.leader) + "</span>" : "") +
         '<button class="icon-btn" data-viewsun="' + s.id + '">View charts</button>' +
-        '<button class="icon-btn" data-editsun="' + s.id + '">Edit</button>' +
-        '<button class="icon-btn" data-delsun="' + s.id + '">Delete</button>' +
+        '<button class="icon-btn editor-only" data-editsun="' + s.id + '">Edit</button>' +
+        '<button class="icon-btn editor-only" data-delsun="' + s.id + '">Delete</button>' +
         "</div></div>" +
         '<div class="sunday-songs">' +
         (s.songs || []).map(function (e) {
@@ -1432,7 +1524,7 @@
   /* ============================== BOOT ============================== */
   renderLibrary();
   renderTracker();
-  loadAll().then(finishInit);
+  Promise.all([loadRole(), loadAll()]).then(finishInit);
 })();
 </script>
 </body>
