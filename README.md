@@ -36,6 +36,8 @@ api/sundays/[id].js   PATCH (update) / DELETE a Sunday log
 api/blob-upload.js    receives one rendered page image from the browser and stores it in Vercel Blob
 api/_db.js            shared Postgres connection helper
 api/_blob.js           shared Blob cleanup helper
+middleware.mjs         optional password gate for the whole app (see "Require a password" below)
+vercel.json            points Vercel at middleware.mjs
 schema.sql            the two tables to create before first use
 ```
 
@@ -95,7 +97,22 @@ standalone copy of the app.
 If you ever see an error mentioning an unsupported Node.js version, go to
 **Project Settings → General → Node.js Version** and set it to 20.x or newer.
 
-### 4. Updating later
+### 4. Require a password (optional)
+
+By default the app is public to anyone with the URL. To require a password
+before anyone can open it (or call any of its `/api` routes directly):
+
+- Go to **Project Settings → Environment Variables** and add `APP_PASSWORD`
+  set to whatever password you want your worship team to use.
+- Redeploy (same as above, since a new environment variable was added).
+
+From then on, visiting the site shows your browser's own built-in login
+prompt — any username works, only the password is checked. Most browsers
+remember it for the rest of that browsing session, so people won't be asked
+again every time. Leave `APP_PASSWORD` unset (or delete it and redeploy) to
+make the app public again.
+
+### 5. Updating later
 
 Any time you want to change the app, edit the files and push to GitHub again
 — Vercel redeploys automatically on every push to your main branch.
