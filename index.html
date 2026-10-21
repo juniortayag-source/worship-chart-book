@@ -1,0 +1,1312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Worship Chart Book</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Sora:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f7f5;
+    --surface: #ffffff;
+    --surface-2: #edefeb;
+    --text: #1d2320;
+    --text-dim: #5c655f;
+    --border: #dde1dc;
+    --accent: #2f6f5e;
+    --accent-dim: #dbeae5;
+    --accent-contrast: #ffffff;
+    --chord: #b3562a;
+    --danger: #b34242;
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.06), 0 4px 16px rgba(20, 30, 25, 0.06);
+    --font-display: "Fraunces", Georgia, serif;
+    --font-body: "Sora", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --chart-font-size: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #14181a;
+      --surface: #1c2123;
+      --surface-2: #252b2c;
+      --text: #edefec;
+      --text-dim: #9aa39d;
+      --border: #303735;
+      --accent: #5cb69c;
+      --accent-dim: #223530;
+      --accent-contrast: #0c1211;
+      --chord: #e4956a;
+      --danger: #e08080;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 20px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #14181a;
+    --surface: #1c2123;
+    --surface-2: #252b2c;
+    --text: #edefec;
+    --text-dim: #9aa39d;
+    --border: #303735;
+    --accent: #5cb69c;
+    --accent-dim: #223530;
+    --accent-contrast: #0c1211;
+    --chord: #e4956a;
+    --danger: #e08080;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 20px rgba(0, 0, 0, 0.35);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    padding: 16px;
+    padding-bottom: 40px;
+    min-height: 100vh;
+  }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text-wrap: balance; }
+  button { font-family: var(--font-body); cursor: pointer; }
+  input, select, textarea { font-family: var(--font-body); }
+  a { color: var(--accent); }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+
+  .wrap { max-width: 780px; margin: 0 auto; }
+
+  .top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand h1 { font-size: 1.7rem; letter-spacing: -0.01em; }
+  .brand .mark { color: var(--accent); font-size: 1.5rem; }
+  .subtitle { color: var(--text-dim); font-size: 0.85rem; }
+
+  .tabs { display: flex; gap: 4px; margin: 18px 0 20px; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    background: none; border: none; padding: 10px 4px; margin-right: 20px;
+    font-size: 0.95rem; font-weight: 600; color: var(--text-dim);
+    border-bottom: 2px solid transparent; translate: 0 1px;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); border-radius: 9px; padding: 9px 14px;
+    font-size: 0.88rem; font-weight: 600; box-shadow: var(--shadow);
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+  .btn.danger { color: var(--danger); border-color: var(--border); }
+  .btn.ghost { box-shadow: none; border-color: transparent; background: transparent; }
+  .btn.small { padding: 6px 10px; font-size: 0.78rem; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .icon-btn { border: none; background: none; color: var(--text-dim); font-size: 1rem; padding: 4px 8px; border-radius: 6px; }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+
+  input[type=text], input[type=date], input[type=number], select, textarea, input[type=search] {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: 8px; padding: 9px 11px; font-size: 0.9rem; width: 100%;
+  }
+  textarea { resize: vertical; min-height: 60px; }
+  label { font-size: 0.78rem; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; display: block; margin-bottom: 4px; }
+  .field { margin-bottom: 12px; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
+  .empty-state h3 { color: var(--text); margin-bottom: 6px; }
+
+  .song-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 4px; }
+  .song-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+    box-shadow: var(--shadow); text-align: left; display: flex; flex-direction: column; gap: 6px; position: relative;
+  }
+  .song-card .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+  .song-card h3 { font-size: 1.05rem; line-height: 1.25; cursor: pointer; }
+  .song-card h3:hover { color: var(--accent); }
+  .song-card .artist { color: var(--text-dim); font-size: 0.82rem; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+  .chip { background: var(--surface-2); color: var(--text-dim); border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
+  .chip.key { background: var(--accent-dim); color: var(--accent); }
+  .meta-line { color: var(--text-dim); font-size: 0.76rem; margin-top: 4px; }
+  .song-card .menu-wrap { position: relative; }
+  .menu { position: absolute; right: 0; top: 26px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); z-index: 5; min-width: 140px; overflow: hidden; }
+  .menu button { display: block; width: 100%; text-align: left; background: none; border: none; padding: 9px 12px; font-size: 0.85rem; color: var(--text); }
+  .menu button:hover { background: var(--surface-2); }
+  .menu button.danger { color: var(--danger); }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(10, 15, 12, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 50; }
+  .modal { background: var(--surface); border-radius: 14px; padding: 22px; width: 100%; max-width: 520px; box-shadow: var(--shadow); }
+  .modal h2 { font-size: 1.25rem; margin-bottom: 16px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+  .song-entry-row { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; background: var(--surface-2); }
+  .song-entry-row .field-row { margin-bottom: 8px; }
+
+  .toast-stack { position: fixed; left: 0; right: 0; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 90; pointer-events: none; }
+  .toast { background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; box-shadow: var(--shadow); max-width: 90vw; text-align: center; }
+  .toast.error { background: var(--danger); color: #fff; }
+
+  /* Song viewer */
+  .song-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  .song-header h2 { font-size: 1.6rem; }
+  .song-header .artist { color: var(--text-dim); font-size: 0.9rem; margin-top: 2px; }
+  .controls-bar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin: 14px 0; box-shadow: var(--shadow);
+  }
+  .controls-bar.sticky-bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 4; }
+  .control-group { display: flex; align-items: center; gap: 6px; }
+  .control-group .label-txt { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin-right: 2px; }
+  .stepper { display: flex; align-items: center; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .stepper button { border: none; background: var(--surface); color: var(--text); width: 28px; height: 28px; font-size: 1rem; }
+  .stepper button:hover { background: var(--surface-2); }
+  .stepper .val { min-width: 44px; text-align: center; font-size: 0.85rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .metro-pulse { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); }
+  .metro-pulse.beat { background: var(--chord); border-color: var(--chord); }
+  #metroSound.muted { opacity: 0.45; }
+
+  .chart-scroll { overflow-x: auto; padding-bottom: 12px; }
+  .chart-box { font-family: var(--font-mono); font-size: var(--chart-font-size); line-height: 2.1; min-width: min-content; }
+  .line-pair { margin-bottom: 2px; }
+  .chord-row { position: relative; height: 1.35em; white-space: pre; }
+  .chord-row.empty { height: 0; }
+  .chord-row span { position: absolute; top: 0; color: var(--chord); font-weight: 600; white-space: pre; }
+  .lyric-row { white-space: pre; }
+  .chord-only-row { color: var(--chord); font-weight: 600; white-space: pre; margin: 2px 0; }
+  .section-header { color: var(--accent); font-family: var(--font-body); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.78em; margin: 14px 0 4px; }
+  .blank-line { height: 0.7em; }
+  .page-divider { color: var(--text-dim); font-family: var(--font-body); font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.06em; border-top: 1px dashed var(--border); margin: 16px 0 10px; padding-top: 8px; }
+  .parse-note { background: var(--accent-dim); color: var(--accent); border-radius: 10px; padding: 10px 14px; font-size: 0.82rem; margin-bottom: 14px; }
+
+  /* Tracker */
+  .sunday-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); margin-bottom: 12px; }
+  .sunday-card .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .sunday-date { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; }
+  .sunday-songs { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .sunday-song-row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 0.88rem; }
+  .sunday-song-row .title { font-weight: 600; }
+  .sunday-song-row .detail { color: var(--text-dim); font-size: 0.8rem; }
+  .sunday-notes { margin-top: 8px; font-size: 0.82rem; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 8px; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+  .stat-tile .num { font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat-tile .lbl { color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .top-songs-list { display: flex; flex-direction: column; gap: 6px; }
+  .top-songs-list .trow { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; }
+  .top-songs-list .trow .n { color: var(--text-dim); width: 18px; }
+  .top-songs-list .trow .bar { flex: 1; height: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+  .top-songs-list .trow .bar > i { display: block; height: 100%; background: var(--accent); }
+  .top-songs-list .trow .count { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
+
+  .banner { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 16px; }
+  .banner.warn { background: #fbeee4; color: #8a4a1c; border-color: #f0d3b8; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .banner.warn { background: #3a2a1a; color: #f0c090; border-color: #55432a; } }
+  :root[data-theme="dark"] .banner.warn { background: #3a2a1a; color: #f0c090; border-color: #55432a; }
+
+  .searchbar { max-width: 320px; }
+  .remove-row-btn { color: var(--danger); background: none; border: none; font-size: 0.78rem; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<datalist id="key-options">
+  <option value="C"><option value="G"><option value="D"><option value="A"><option value="E"><option value="B">
+  <option value="F#"><option value="Db"><option value="Ab"><option value="Eb"><option value="Bb"><option value="F">
+  <option value="Am"><option value="Em"><option value="Bm"><option value="Dm"><option value="Gm"><option value="Cm">
+</datalist>
+
+<div class="wrap" id="app">
+  <div class="top">
+    <div class="brand"><span class="mark">&#9834;</span><h1>Worship Chart Book</h1></div>
+    <div class="subtitle" id="statusLine">Loading…</div>
+  </div>
+
+  <div id="capBanner" class="banner warn" hidden>
+    Can't reach the server right now, so songs and setlists won't load or save. Check that <code>DATABASE_URL</code> is set (see README.md) and reload.
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="library">Library</button>
+    <button class="tab-btn" data-tab="tracker">Sunday Tracker</button>
+  </div>
+
+  <!-- LIBRARY VIEW -->
+  <div id="view-library">
+    <div class="row" style="margin-bottom:14px;">
+      <input type="search" class="searchbar" id="librarySearch" placeholder="Search title, artist or tag…">
+      <div class="spacer"></div>
+      <button class="btn primary" id="btnAddSong">+ Add song</button>
+    </div>
+    <div id="songGrid" class="song-grid"></div>
+    <div id="libraryEmpty" class="empty-state" hidden>
+      <h3>No songs yet</h3>
+      <div>Add your first chord chart to get started.</div>
+    </div>
+  </div>
+
+  <!-- SONG VIEW -->
+  <div id="view-song" hidden>
+    <button class="btn ghost small" id="btnBackToLibrary">&larr; Back to library</button>
+    <div class="song-header">
+      <div>
+        <h2 id="songTitle"></h2>
+        <div class="artist" id="songArtist"></div>
+      </div>
+      <div class="row">
+        <span class="chip key" id="songKeyChip"></span>
+        <button class="btn ghost small" id="btnEditSong">Edit song</button>
+        <button class="btn small" id="btnAddToSunday">+ Add to a Sunday</button>
+      </div>
+    </div>
+
+    <div class="controls-bar" id="metronomeBar">
+      <div class="control-group">
+        <span class="metro-pulse" id="metroPulse"></span>
+        <button class="btn small" id="metroToggle">&#9654; Start</button>
+      </div>
+      <div class="control-group">
+        <span class="label-txt">BPM</span>
+        <div class="stepper">
+          <button id="bpmDown">&minus;</button>
+          <span class="val" id="bpmVal">90</span>
+          <button id="bpmUp">+</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <button class="icon-btn" id="metroSound" title="Toggle click sound">&#128264;</button>
+      </div>
+    </div>
+
+    <div class="controls-bar sticky-bar">
+      <div class="control-group">
+        <span class="label-txt">Transpose</span>
+        <div class="stepper">
+          <button id="transDown">&minus;</button>
+          <span class="val" id="transVal">0</span>
+          <button id="transUp">+</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <span class="label-txt">Text size</span>
+        <div class="stepper">
+          <button id="fontDown">A&minus;</button>
+          <span class="val" id="fontVal">16</span>
+          <button id="fontUp">A+</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <button class="btn small" id="btnAutoscroll">&#9654; Autoscroll</button>
+      </div>
+      <div class="control-group" id="scrollSpeedGroup" hidden>
+        <span class="label-txt">Speed</span>
+        <input type="range" min="1" max="10" value="4" id="scrollSpeed" style="width:80px;">
+      </div>
+    </div>
+
+    <div id="parseNote" class="parse-note" hidden></div>
+    <div class="chart-scroll"><div id="chartBox" class="chart-box"></div></div>
+  </div>
+
+  <!-- TRACKER VIEW -->
+  <div id="view-tracker" hidden>
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="row" style="margin-bottom:14px;">
+      <h3 style="font-size:1.1rem;">Service history</h3>
+      <div class="spacer"></div>
+      <button class="btn primary" id="btnLogSunday">+ Log a Sunday</button>
+    </div>
+    <div id="sundayList"></div>
+    <div id="trackerEmpty" class="empty-state" hidden>
+      <h3>No Sundays logged yet</h3>
+      <div>Log your first setlist to start tracking what you've played.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal root -->
+<div id="modalRoot"></div>
+<div id="toastStack" class="toast-stack"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* ============================== CHORD ENGINE ============================== */
+  var CHORD_RE = /^[A-G](#|b)?(maj7|maj9|maj13|maj|min7|min9|min|m7b5|m7|m9|m6|madd9|mo7|m|dim7|dim|aug|sus2|sus4|sus|add9|add2|add11|6\/9|6|7sus4|7b9|7#9|7|9|11|13|no3)?(\/[A-G](#|b)?)?$/;
+  var CHORD_TOKEN_ALLOW = { "N.C.": 1, "NC": 1, "%": 1, "-": 1, "/": 1 };
+
+  function isChordToken(tok) {
+    if (!tok) return false;
+    if (CHORD_TOKEN_ALLOW[tok]) return true;
+    return CHORD_RE.test(tok);
+  }
+  function isChordLineTokens(tokens) {
+    if (tokens.length === 0) return false;
+    var chordish = 0;
+    for (var i = 0; i < tokens.length; i++) if (isChordToken(tokens[i].text)) chordish++;
+    var allowStray = tokens.length > 4 ? 1 : 0;
+    return chordish >= tokens.length - allowStray && chordish > 0;
+  }
+  function groupIntoLines(items, yTolerance) {
+    yTolerance = yTolerance || 2.5;
+    var withPos = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it.str || !it.str.trim()) continue;
+      withPos.push({ text: it.str, x: it.transform[4], y: it.transform[5], width: it.width });
+    }
+    withPos.sort(function (a, b) { return b.y - a.y || a.x - b.x; });
+    var lines = [];
+    for (var j = 0; j < withPos.length; j++) {
+      var item = withPos[j];
+      var line = null;
+      for (var k = 0; k < lines.length; k++) {
+        if (Math.abs(lines[k].y - item.y) <= yTolerance) { line = lines[k]; break; }
+      }
+      if (!line) { line = { y: item.y, items: [] }; lines.push(line); }
+      line.items.push(item);
+    }
+    lines.sort(function (a, b) { return b.y - a.y; });
+    lines.forEach(function (l) { l.items.sort(function (a, b) { return a.x - b.x; }); });
+    return lines;
+  }
+  function tokenizeLine(line) {
+    var tokens = [];
+    for (var i = 0; i < line.items.length; i++) {
+      var item = line.items[i];
+      var chars = item.text;
+      var charW = chars.length ? item.width / chars.length : 0;
+      var idx = 0;
+      while (idx < chars.length) {
+        while (idx < chars.length && chars[idx] === " ") idx++;
+        if (idx >= chars.length) break;
+        var start = idx;
+        while (idx < chars.length && chars[idx] !== " ") idx++;
+        tokens.push({ text: chars.slice(start, idx), x: item.x + start * charW });
+      }
+    }
+    tokens.sort(function (a, b) { return a.x - b.x; });
+    return tokens;
+  }
+  // Reconstruct a lyric line's text + per-character x positions, inserting a
+  // space wherever two text items don't visually touch (fixes word-merging
+  // like "BlessedbeYour" when a PDF emits each word as its own text-show op).
+  function charMapForLine(line) {
+    var totalW = 0, totalC = 0, i;
+    for (i = 0; i < line.items.length; i++) { totalW += line.items[i].width; totalC += line.items[i].text.length; }
+    var lineAvgCharW = totalC ? totalW / totalC : 6;
+    var text = "", xs = [], lastEnd = null;
+    for (i = 0; i < line.items.length; i++) {
+      var item = line.items[i];
+      var chars = item.text;
+      var itemCharW = chars.length ? item.width / chars.length : lineAvgCharW;
+      if (lastEnd !== null) {
+        var gap = item.x - lastEnd;
+        var threshold = Math.min(itemCharW, lineAvgCharW) * 0.35;
+        if (gap > threshold) {
+          var spaceCount = gap > lineAvgCharW * 1.8 ? Math.min(8, Math.max(1, Math.round(gap / lineAvgCharW))) : 1;
+          for (var s = 0; s < spaceCount; s++) { text += " "; xs.push(lastEnd + (gap * (s + 1)) / (spaceCount + 1)); }
+        }
+      }
+      for (var c = 0; c < chars.length; c++) { text += chars[c]; xs.push(item.x + c * itemCharW); }
+      lastEnd = item.x + item.width;
+    }
+    return { text: text, xs: xs };
+  }
+  function nearestCharIndex(xs, targetX) {
+    if (xs.length === 0) return 0;
+    var best = 0, bestDist = Infinity;
+    for (var i = 0; i < xs.length; i++) {
+      var d = Math.abs(xs[i] - targetX);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return best;
+  }
+  var HEADER_RE = /^\[?(verse|chorus|bridge|pre-?chorus|intro|outro|tag|ending|interlude|refrain|vamp)\b.*\]?$/i;
+  function isHeaderLine(text) { return HEADER_RE.test(text.trim()) && text.trim().length < 40; }
+
+  // Row-local-break clustering: for each row, collect every internal x-gap
+  // wide enough to be a column break, and note where the second segment
+  // starts. If that x recurs at roughly the same position across many rows,
+  // that's almost certainly a real 2-column gutter.
+  function findColumnGutter(rows, pageWidth) {
+    if (!pageWidth || rows.length === 0) return null;
+    var loBound = pageWidth * 0.15, hiBound = pageWidth * 0.85;
+    var breakXs = [];
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      if (row.items.length < 2) continue;
+      var totalW = 0, totalC = 0;
+      for (var i = 0; i < row.items.length; i++) { totalW += row.items[i].width; totalC += row.items[i].text.length; }
+      var avgW = totalC ? totalW / totalC : 6;
+      var minGap = Math.max(18, avgW * 2.4);
+      for (var k = 0; k < row.items.length - 1; k++) {
+        var gap = row.items[k + 1].x - (row.items[k].x + row.items[k].width);
+        if (gap > minGap) {
+          var breakX = row.items[k + 1].x;
+          if (breakX > loBound && breakX < hiBound) breakXs.push(breakX);
+        }
+      }
+    }
+    if (breakXs.length < 3) return null;
+    var buckets = {};
+    for (i = 0; i < breakXs.length; i++) {
+      var b = Math.round(breakXs[i] / 6) * 6;
+      buckets[b] = (buckets[b] || 0) + 1;
+    }
+    var bestBucket = null, bestCount = 0;
+    for (var key in buckets) {
+      if (buckets[key] > bestCount) { bestCount = buckets[key]; bestBucket = Number(key); }
+    }
+    var near = breakXs.filter(function (x) { return Math.abs(x - bestBucket) <= 15; });
+    var minRowsNeeded = Math.max(3, Math.ceil(rows.length * 0.12));
+    if (near.length < minRowsNeeded) return null;
+    var sum = 0;
+    for (i = 0; i < near.length; i++) sum += near[i];
+    return sum / near.length;
+  }
+
+  function linesFromRows(rows) {
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var tokens = tokenizeLine(row);
+      var lineText = tokens.map(function (t) { return t.text; }).join(" ");
+      if (tokens.length === 0) { out.push({ type: "blank" }); continue; }
+      if (isHeaderLine(lineText) && !isChordLineTokens(tokens)) { out.push({ type: "header", text: lineText.trim() }); continue; }
+      if (isChordLineTokens(tokens)) {
+        var next = rows[i + 1];
+        var nextTokens = next ? tokenizeLine(next) : [];
+        var nextText = nextTokens.map(function (t) { return t.text; }).join(" ");
+        var nextIsLyric = next && nextTokens.length > 0 && !isChordLineTokens(nextTokens) && !isHeaderLine(nextText);
+        if (nextIsLyric) {
+          var cm = charMapForLine(next);
+          var chordsArr = tokens.map(function (t) { return { index: nearestCharIndex(cm.xs, t.x), symbol: t.text }; });
+          out.push({ type: "lyric", text: cm.text, chords: chordsArr });
+          i++;
+        } else {
+          var totalW = 0, totalC = 0;
+          for (var ri = 0; ri < row.items.length; ri++) { totalW += row.items[ri].width; totalC += row.items[ri].text.length; }
+          var avgW = totalC ? totalW / totalC : 6;
+          var text = "", cursor = 0;
+          var baseX = tokens[0].x;
+          for (var ti = 0; ti < tokens.length; ti++) {
+            var t = tokens[ti];
+            var col = Math.round((t.x - baseX) / avgW);
+            while (cursor < col) { text += " "; cursor++; }
+            text += t.text; cursor += t.text.length;
+          }
+          out.push({ type: "chordOnly", text: text });
+        }
+        continue;
+      }
+      out.push({ type: "lyric", text: lineText, chords: [] });
+    }
+    return out;
+  }
+
+  function buildDisplayLines(items, pageWidth) {
+    var rows = groupIntoLines(items);
+    var gutterX = findColumnGutter(rows, pageWidth);
+    if (gutterX == null) return linesFromRows(rows);
+
+    var leftRows = [], rightRows = [], fullRows = [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var left = [], right = [], straddling = false;
+      for (var j = 0; j < row.items.length; j++) {
+        var it = row.items[j];
+        if (it.x < gutterX && it.x + it.width > gutterX) { straddling = true; break; }
+        if (it.x + it.width <= gutterX) left.push(it);
+        else if (it.x >= gutterX) right.push(it);
+      }
+      if (straddling) {
+        fullRows.push(row);
+      } else if (left.length && right.length) {
+        leftRows.push({ y: row.y, items: left });
+        rightRows.push({ y: row.y, items: right });
+      } else if (left.length) {
+        leftRows.push({ y: row.y, items: left });
+      } else if (right.length) {
+        rightRows.push({ y: row.y, items: right });
+      }
+    }
+    var colYs = leftRows.concat(rightRows).map(function (r) { return r.y; });
+    var colMaxY = colYs.length ? Math.max.apply(null, colYs) : Infinity;
+    var colMinY = colYs.length ? Math.min.apply(null, colYs) : -Infinity;
+    var preamble = [], postamble = [];
+    for (var fi = 0; fi < fullRows.length; fi++) {
+      var frow = fullRows[fi];
+      if (frow.y >= colMaxY) preamble.push(frow);
+      else if (frow.y <= colMinY) postamble.push(frow);
+      else (colMaxY - frow.y <= frow.y - colMinY ? preamble : postamble).push(frow);
+    }
+    var out = linesFromRows(preamble);
+    if (preamble.length) out.push({ type: "blank" });
+    out = out.concat(linesFromRows(leftRows));
+    if (leftRows.length && rightRows.length) out.push({ type: "blank" });
+    out = out.concat(linesFromRows(rightRows));
+    if (postamble.length) out.push({ type: "blank" });
+    out = out.concat(linesFromRows(postamble));
+    return out;
+  }
+
+  var SHARP_SCALE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  var FLAT_SCALE = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+  var NOTE_INDEX = { C: 0, "B#": 0, "C#": 1, Db: 1, D: 2, "D#": 3, Eb: 3, E: 4, Fb: 4, F: 5, "E#": 5, "F#": 6, Gb: 6, G: 7, "G#": 8, Ab: 8, A: 9, "A#": 10, Bb: 10, B: 11, Cb: 11 };
+  var CHORD_PARSE_RE = /^([A-G](?:#|b)?)(.*?)(?:\/([A-G](?:#|b)?))?$/;
+  var FLAT_KEY_ROOTS = { F: 1, Bb: 1, Eb: 1, Ab: 1, Db: 1, Gb: 1, Cb: 1, Dm: 1, Gm: 1, Cm: 1, Fm: 1, Bbm: 1, Ebm: 1, Abm: 1 };
+
+  function transposeChord(symbol, semitones, preferFlats) {
+    if (!semitones) return symbol;
+    if (!isChordToken(symbol) || CHORD_TOKEN_ALLOW[symbol]) return symbol;
+    var m = symbol.match(CHORD_PARSE_RE);
+    if (!m) return symbol;
+    var root = m[1], quality = m[2] || "", bass = m[3];
+    var scale = preferFlats ? FLAT_SCALE : SHARP_SCALE;
+    function shift(note) {
+      var idx = NOTE_INDEX[note];
+      if (idx === undefined) return note;
+      return scale[((idx + semitones) % 12 + 12) % 12];
+    }
+    var outc = shift(root) + quality;
+    if (bass) outc += "/" + shift(bass);
+    return outc;
+  }
+  function keyPrefersFlats(key) {
+    if (!key) return false;
+    return !!FLAT_KEY_ROOTS[key.trim()];
+  }
+
+  /* ============================== APP STATE ============================== */
+  var songs = [];   // local cache of song docs {id,...}
+  var sundays = []; // local cache of sunday docs {id,...}
+  var state = { tab: "library", songId: null, transpose: 0, fontSize: 16, autoscroll: false, scrollTimer: null };
+
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function fmtDate(iso) {
+    if (!iso) return "";
+    var d = new Date(iso + "T12:00:00");
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  }
+  function nextSundayISO() {
+    var d = new Date();
+    var day = d.getDay();
+    var add = (7 - day) % 7;
+    d.setDate(d.getDate() + add);
+    return d.toISOString().slice(0, 10);
+  }
+  function uid() { return Math.random().toString(36).slice(2, 10); }
+
+  /* ============================== API WIRING ============================== */
+  // Thin wrapper around fetch(): throws with the server's error message (if
+  // any) on a non-2xx response, otherwise resolves the parsed JSON body.
+  function apiFetch(method, url, body) {
+    var opts = { method: method, headers: {} };
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(url, opts).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok) throw new Error((data && data.error) || ("Request failed (" + res.status + ")"));
+        return data;
+      });
+    });
+  }
+
+  function loadAll() {
+    return Promise.all([apiFetch("GET", "/api/songs"), apiFetch("GET", "/api/sundays")]).then(function (r) {
+      songs = r[0] || [];
+      sundays = r[1] || [];
+      songs.sort(function (a, b) { return (a.title || "").localeCompare(b.title || ""); });
+      sundays.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
+      $("capBanner").hidden = true;
+      renderLibrary();
+      renderTracker();
+      if (state.tab === "song" && state.songId) renderSongView();
+    }).catch(function (e) {
+      $("capBanner").hidden = false;
+      $("capBanner").textContent = "Can't reach the server (" + e.message + "). Check DATABASE_URL and reload.";
+    });
+  }
+  function finishInit() {
+    $("statusLine").textContent = songs.length ? (songs.length + " song" + (songs.length === 1 ? "" : "s") + " in your library") : "";
+  }
+
+  /* ============================== PDF PROCESSING ============================== */
+  // The PDF never leaves the browser: it's only used here to extract text,
+  // which becomes the stored chart. The file itself is discarded afterward
+  // and never uploaded anywhere.
+  if (window.pdfjsLib) {
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    } catch (e) {}
+  }
+
+  var TEMPO_RE = /\b(?:tempo|bpm)\b\D{0,6}(\d{2,3})|(\d{2,3})\s*bpm\b/i;
+  function processPdfFile(file, progressCb) {
+    return file.arrayBuffer().then(function (buf) {
+      return pdfjsLib.getDocument({ data: buf }).promise.then(function (doc) {
+        var detectedBpm = null;
+        var chain = Promise.resolve();
+        var pageResults = [];
+        var totalChars = 0;
+        for (var p = 1; p <= doc.numPages; p++) {
+          (function (pageNum) {
+            chain = chain.then(function () {
+              if (progressCb) progressCb("Reading page " + pageNum + " of " + doc.numPages + "…");
+              return doc.getPage(pageNum).then(function (page) {
+                var pageWidth = page.getViewport({ scale: 1 }).width;
+                return page.getTextContent().then(function (content) {
+                  var lines = buildDisplayLines(content.items, pageWidth);
+                  lines.forEach(function (l) {
+                    if (l.type === "lyric" || l.type === "chordOnly" || l.type === "header") {
+                      var t = l.text || "";
+                      totalChars += (l.type !== "header" ? t.trim().length : 0);
+                      if (detectedBpm === null) {
+                        var m = t.match(TEMPO_RE);
+                        if (m) {
+                          var n = parseInt(m[1] || m[2], 10);
+                          if (n >= 40 && n <= 240) detectedBpm = n;
+                        }
+                      }
+                    }
+                  });
+                  pageResults.push(lines);
+                });
+              });
+            });
+          })(p);
+        }
+        return chain.then(function () {
+          // A PDF with hardly any extractable text is almost always a scanned
+          // image rather than real text — nothing useful to show, and since
+          // we don't keep the original file there's no image fallback either.
+          var sparse = totalChars < 15 * doc.numPages || totalChars < 15;
+          return { chart: pageResults, parseFailed: sparse, pageCount: doc.numPages, detectedBpm: detectedBpm };
+        });
+      });
+    });
+  }
+
+  /* ============================== MANUAL CHART ENTRY ============================== */
+  // Lets someone type/paste a chart by hand instead of (or in addition to)
+  // uploading a PDF. Format: chords go inline in [brackets] right before the
+  // syllable they land on, e.g. "[G]Amazing [C]grace how [G]sweet the sound".
+  // A short line like "Verse 1" or "Chorus" on its own becomes a section
+  // header (same rule the PDF parser uses). Produces the same { chart }
+  // shape the PDF pipeline produces, so rendering/transposing "just works".
+  function parseManualChart(text) {
+    var rawLines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+    var page = [];
+    for (var i = 0; i < rawLines.length; i++) {
+      var raw = rawLines[i];
+      var trimmed = raw.trim();
+      if (trimmed === "") { page.push({ type: "blank" }); continue; }
+      if (isHeaderLine(trimmed)) {
+        page.push({ type: "header", text: trimmed.replace(/^\[/, "").replace(/\]$/, "").trim() });
+        continue;
+      }
+      var chordRe = /\[([^\[\]]*)\]/g;
+      var chords = [];
+      var cleaned = "";
+      var lastEnd = 0;
+      var m;
+      while ((m = chordRe.exec(raw))) {
+        cleaned += raw.slice(lastEnd, m.index);
+        var sym = m[1].trim();
+        if (sym) chords.push({ index: cleaned.length, symbol: sym });
+        lastEnd = m.index + m[0].length;
+      }
+      cleaned += raw.slice(lastEnd);
+      if (cleaned.trim() !== "") {
+        var lead = cleaned.match(/^\s*/)[0].length;
+        if (lead) {
+          cleaned = cleaned.slice(lead);
+          chords.forEach(function (c) { c.index = Math.max(0, c.index - lead); });
+        }
+        cleaned = cleaned.replace(/\s+$/, "");
+      }
+
+      if (cleaned.trim() === "" && chords.length) {
+        var width = 0;
+        chords.forEach(function (c) { width = Math.max(width, c.index + c.symbol.length); });
+        var chars = [];
+        for (var w = 0; w < width; w++) chars.push(" ");
+        chords.forEach(function (c) { for (var k = 0; k < c.symbol.length; k++) chars[c.index + k] = c.symbol[k]; });
+        page.push({ type: "chordOnly", text: chars.join("") });
+        continue;
+      }
+      page.push({ type: "lyric", text: cleaned, chords: chords });
+    }
+    return [page];
+  }
+  // Reverse of the above, so re-opening "Edit song" on a chart shows
+  // editable bracket-notation text.
+  function chartToText(chart) {
+    if (!chart || !chart.length) return "";
+    var out = [];
+    chart.forEach(function (pageLines, pIdx) {
+      if (pIdx > 0) out.push("");
+      pageLines.forEach(function (line) {
+        if (line.type === "blank") { out.push(""); return; }
+        if (line.type === "header") { out.push(line.text); return; }
+        if (line.type === "chordOnly") {
+          var t = line.text, res = "", last = 0, re = /\S+/g, mm;
+          while ((mm = re.exec(t))) { res += t.slice(last, mm.index) + "[" + mm[0] + "]"; last = mm.index + mm[0].length; }
+          res += t.slice(last);
+          out.push(res);
+          return;
+        }
+        var text = line.text || "";
+        var chords = (line.chords || []).slice().sort(function (a, b) { return b.index - a.index; });
+        chords.forEach(function (c) { text = text.slice(0, c.index) + "[" + c.symbol + "]" + text.slice(c.index); });
+        out.push(text);
+      });
+    });
+    return out.join("\n");
+  }
+
+  /* ============================== RENDER: LIBRARY ============================== */
+  function songStats(songId) {
+    var count = 0, last = null;
+    sundays.forEach(function (s) {
+      (s.songs || []).forEach(function (e) {
+        if (e.songId === songId) {
+          count++;
+          if (!last || s.date > last) last = s.date;
+        }
+      });
+    });
+    return { count: count, last: last };
+  }
+
+  function renderLibrary() {
+    var q = ($("librarySearch").value || "").toLowerCase().trim();
+    var grid = $("songGrid");
+    var filtered = songs.filter(function (s) {
+      if (!q) return true;
+      var hay = [s.title, s.artist, (s.tags || []).join(" ")].join(" ").toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+    $("libraryEmpty").hidden = songs.length !== 0;
+    grid.innerHTML = filtered.map(function (s) {
+      var stats = songStats(s.id);
+      var lastTxt = stats.last ? ("Last played " + fmtDate(stats.last)) : "Not yet played";
+      return (
+        '<div class="song-card" data-id="' + s.id + '">' +
+        '<div class="card-top">' +
+        '<h3 data-open="' + s.id + '">' + esc(s.title || "Untitled") + "</h3>" +
+        '<div class="menu-wrap">' +
+        '<button class="icon-btn" data-menu="' + s.id + '">&#8942;</button>' +
+        "</div></div>" +
+        (s.artist ? '<div class="artist">' + esc(s.artist) + "</div>" : "") +
+        '<div class="chip-row">' +
+        (s.defaultKey ? '<span class="chip key">' + esc(s.defaultKey) + "</span>" : "") +
+        (s.tags || []).map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("") +
+        "</div>" +
+        '<div class="meta-line">' + lastTxt + (stats.count ? " &middot; played " + stats.count + "&times;" : "") + "</div>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  function toggleCardMenu(songId, anchorEl) {
+    closeMenus();
+    var menu = document.createElement("div");
+    menu.className = "menu";
+    menu.innerHTML =
+      '<button data-act="edit">Edit details</button>' +
+      '<button data-act="delete" class="danger">Delete song</button>';
+    anchorEl.parentElement.appendChild(menu);
+    menu.querySelector('[data-act="edit"]').onclick = function () { closeMenus(); openSongModal(songId); };
+    menu.querySelector('[data-act="delete"]').onclick = function () { closeMenus(); deleteSong(songId); };
+  }
+  function closeMenus() { document.querySelectorAll(".menu").forEach(function (m) { m.remove(); }); }
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".menu-wrap")) closeMenus();
+  });
+
+  function deleteSong(songId) {
+    var s = songs.find(function (x) { return x.id === songId; });
+    if (!s) return;
+    showConfirmModal('Delete "' + (s.title || "this song") + '"? This removes its chart.', "Delete", function () {
+      apiFetch("DELETE", "/api/songs/" + songId)
+        .then(function () { return loadAll(); })
+        .then(function () { showToast('Deleted "' + (s.title || "song") + '"'); })
+        .catch(function (e) { showToast("Couldn't delete: " + e.message, true); });
+    });
+  }
+
+  $("songGrid").addEventListener("click", function (e) {
+    var openEl = e.target.closest("[data-open]");
+    if (openEl) { openSong(openEl.getAttribute("data-open")); return; }
+    var menuEl = e.target.closest("[data-menu]");
+    if (menuEl) { e.stopPropagation(); toggleCardMenu(menuEl.getAttribute("data-menu"), menuEl); return; }
+  });
+  $("librarySearch").addEventListener("input", renderLibrary);
+
+  /* ============================== SONG MODAL (add/edit) ============================== */
+  function openSongModal(editId) {
+    var editing = editId ? songs.find(function (s) { return s.id === editId; }) : null;
+    var existingChartText = editing ? chartToText(editing.chart) : "";
+    var html =
+      '<div class="modal-backdrop" id="mb"><div class="modal" style="max-width:640px;">' +
+      "<h2>" + (editing ? "Edit song" : "Add a song") + "</h2>" +
+      '<div class="field"><label>Title</label><input type="text" id="f_title" value="' + esc(editing ? editing.title : "") + '" placeholder="Great Are You Lord"></div>' +
+      '<div class="field-row">' +
+      '<div class="field"><label>Artist</label><input type="text" id="f_artist" value="' + esc(editing ? editing.artist : "") + '" placeholder="All Sons &amp; Daughters"></div>' +
+      '<div class="field"><label>Default key</label><input type="text" list="key-options" id="f_key" value="' + esc(editing ? editing.defaultKey : "") + '" placeholder="G"></div>' +
+      "</div>" +
+      '<div class="field"><label>Tags (comma separated)</label><input type="text" id="f_tags" value="' + esc(editing && editing.tags ? editing.tags.join(", ") : "") + '" placeholder="fast, communion"></div>' +
+      '<div class="field"><label>' + (editing ? "Replace chord chart PDF (optional)" : "Chord chart PDF (optional)") + "</label>" +
+      '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">Only the text is read from the PDF to build the chart below — the file itself is never uploaded or stored.</div>' +
+      '<input type="file" id="f_pdf" accept="application/pdf,.pdf"></div>' +
+      '<div class="field">' +
+      '<label>Or type lyrics &amp; chords by hand</label>' +
+      '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">' +
+      "Put a chord in [brackets] right before the word it lands on, e.g. <code>[G]Amazing [C]grace how [G]sweet</code>. " +
+      'A line by itself like "Verse 1" or "Chorus" becomes a section header. ' +
+      (editing ? "Leave as-is to keep the current chart." : "Leave blank if you're uploading a PDF instead.") +
+      "</div>" +
+      '<textarea id="f_chartText" style="min-height:180px;font-family:var(--font-mono);font-size:0.85rem;line-height:1.6;" placeholder="Verse 1\n[G]Amazing [C]grace how [G]sweet the sound">' + esc(existingChartText) + "</textarea>" +
+      "</div>" +
+      '<div id="modalMsg" style="font-size:0.82rem;color:var(--text-dim);min-height:18px;"></div>' +
+      '<div class="modal-actions">' +
+      '<button class="btn ghost" id="mCancel">Cancel</button>' +
+      '<button class="btn primary" id="mSave">' + (editing ? "Save changes" : "Add song") + "</button>" +
+      "</div></div></div>";
+    $("modalRoot").innerHTML = html;
+    $("mCancel").onclick = closeModal;
+    $("mb").addEventListener("click", function (e) { if (e.target.id === "mb") closeModal(); });
+    $("mSave").onclick = function () { saveSongModal(editing); };
+  }
+  function closeModal() { $("modalRoot").innerHTML = ""; }
+
+  function showToast(message, isError) {
+    var el = document.createElement("div");
+    el.className = "toast" + (isError ? " error" : "");
+    el.textContent = message;
+    $("toastStack").appendChild(el);
+    setTimeout(function () { el.remove(); }, 4000);
+  }
+  function showConfirmModal(message, confirmLabel, onConfirm) {
+    var html =
+      '<div class="modal-backdrop" id="mb"><div class="modal" style="max-width:420px;">' +
+      '<div style="font-size:0.95rem;margin-bottom:6px;">' + esc(message) + "</div>" +
+      '<div class="modal-actions">' +
+      '<button class="btn ghost" id="mCancel">Cancel</button>' +
+      '<button class="btn danger" id="mConfirm" style="background:var(--danger);color:#fff;border-color:var(--danger);">' + esc(confirmLabel) + "</button>" +
+      "</div></div></div>";
+    $("modalRoot").innerHTML = html;
+    $("mCancel").onclick = closeModal;
+    $("mb").addEventListener("click", function (e) { if (e.target.id === "mb") closeModal(); });
+    $("mConfirm").onclick = function () { closeModal(); onConfirm(); };
+  }
+
+  function saveSongModal(editing) {
+    var title = $("f_title").value.trim();
+    if (!title) { $("modalMsg").textContent = "Please enter a title."; return; }
+    var artist = $("f_artist").value.trim();
+    var key = $("f_key").value.trim();
+    var tags = $("f_tags").value.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+    var fileInput = $("f_pdf");
+    var file = fileInput.files && fileInput.files[0];
+    var msg = $("modalMsg");
+    var saveBtn = $("mSave");
+
+    // A manual edit to the chart textarea wins over a freshly-picked PDF, so
+    // "Edit song" can be used to hand-correct a chord chart that was parsed
+    // from a PDF. If the textarea is untouched from what was pre-filled,
+    // treat it as "no manual edit" and fall through to the PDF/no-op path.
+    var chartTextEl = $("f_chartText");
+    var chartText = chartTextEl ? chartTextEl.value : "";
+    var originalChartText = chartTextEl ? chartTextEl.defaultValue : "";
+    var manualEdited = chartText.trim() !== "" && chartText !== originalChartText;
+
+    if (!file && !manualEdited && !editing) { msg.textContent = "Please choose a PDF chord chart, or type the lyrics & chords in manually."; return; }
+
+    saveBtn.disabled = true;
+    var base = { title: title, artist: artist, defaultKey: key, tags: tags };
+
+    function finish(extra) {
+      var data = Object.assign({}, base, extra || {});
+      var req = editing ? apiFetch("PATCH", "/api/songs/" + editing.id, data) : apiFetch("POST", "/api/songs", data);
+      req.then(function () { return loadAll(); }).then(closeModal)
+        .catch(function (e) { msg.textContent = e.message; saveBtn.disabled = false; });
+    }
+
+    if (manualEdited) {
+      finish({ chart: parseManualChart(chartText), parseFailed: false });
+      return;
+    }
+    if (!file) { finish(); return; }
+
+    msg.textContent = "Reading chart…";
+    processPdfFile(file, function (t) { msg.textContent = t; }).then(function (parsed) {
+      var extra = { chart: parsed.chart, parseFailed: parsed.parseFailed, pageCount: parsed.pageCount };
+      if (parsed.detectedBpm && !(editing && editing.bpm)) extra.bpm = parsed.detectedBpm;
+      finish(extra);
+    }).catch(function (e) {
+      msg.textContent = "Couldn't read that PDF (" + e.message + "). Saving without a parsed chart.";
+      finish({ parseFailed: true });
+    });
+  }
+
+  $("btnAddSong").addEventListener("click", function () { openSongModal(null); });
+
+  /* ============================== RENDER: SONG VIEW ============================== */
+  function openSong(songId) {
+    var s = songs.find(function (x) { return x.id === songId; });
+    state.songId = songId; state.transpose = 0; stopAutoscroll(); stopMetronome();
+    state.metroBpm = Math.max(40, Math.min(240, (s && s.bpm) || 90));
+    setTab("song");
+    renderSongView();
+  }
+  $("btnBackToLibrary").addEventListener("click", function () { stopAutoscroll(); stopMetronome(); setTab("library"); });
+  $("btnEditSong").addEventListener("click", function () { if (state.songId) openSongModal(state.songId); });
+
+  function renderChartLines(pagesArr, semitones, preferFlats) {
+    var html = "";
+    pagesArr.forEach(function (pageLines, pIdx) {
+      if (pIdx > 0) html += '<div class="page-divider">Page ' + (pIdx + 1) + "</div>";
+      pageLines.forEach(function (line) {
+        if (line.type === "blank") { html += '<div class="blank-line"></div>'; return; }
+        if (line.type === "header") { html += '<div class="section-header">' + esc(line.text) + "</div>"; return; }
+        if (line.type === "chordOnly") {
+          var t = semitones ? transposeLineText(line.text, semitones, preferFlats) : line.text;
+          html += '<div class="chord-only-row">' + esc(t) + "</div>";
+          return;
+        }
+        var chordsHtml = "";
+        if (line.chords && line.chords.length) {
+          chordsHtml = line.chords.map(function (c) {
+            var sym = transposeChord(c.symbol, semitones, preferFlats);
+            return '<span style="left:' + c.index + 'ch">' + esc(sym) + "</span>";
+          }).join("");
+        }
+        html += '<div class="line-pair">' +
+          '<div class="chord-row' + (line.chords && line.chords.length ? "" : " empty") + '">' + chordsHtml + "</div>" +
+          '<div class="lyric-row">' + (esc(line.text) || "&nbsp;") + "</div>" +
+          "</div>";
+      });
+    });
+    return html;
+  }
+  function transposeLineText(text, semitones, preferFlats) {
+    var re = /\S+/g, out = "", last = 0, m;
+    while ((m = re.exec(text))) {
+      out += text.slice(last, m.index);
+      out += transposeChord(m[0], semitones, preferFlats);
+      last = m.index + m[0].length;
+    }
+    out += text.slice(last);
+    return out;
+  }
+
+  function renderSongView() {
+    var s = songs.find(function (x) { return x.id === state.songId; });
+    if (!s) { setTab("library"); return; }
+    $("songTitle").textContent = s.title || "Untitled";
+    $("songArtist").textContent = s.artist || "";
+    var preferFlats = keyPrefersFlats(s.defaultKey);
+    var shownKey = s.defaultKey ? transposeChord(s.defaultKey, state.transpose, preferFlats) : "";
+    $("songKeyChip").textContent = shownKey ? ("Key: " + shownKey) : (state.transpose ? ("Transposed " + (state.transpose > 0 ? "+" : "") + state.transpose) : "");
+    $("songKeyChip").style.display = shownKey || state.transpose ? "" : "none";
+    $("transVal").textContent = (state.transpose > 0 ? "+" : "") + state.transpose;
+    $("fontVal").textContent = state.fontSize;
+    document.documentElement.style.setProperty("--chart-font-size", state.fontSize + "px");
+
+    $("bpmVal").textContent = state.metroBpm;
+
+    var note = $("parseNote");
+    if (s.parseFailed) {
+      note.hidden = false;
+      note.textContent = "We couldn't automatically read this chart. Try re-uploading a text-based PDF, or type it in with “Edit song”.";
+    } else {
+      note.hidden = true;
+    }
+
+    var box = $("chartBox");
+    if (s.chart && s.chart.length) {
+      box.innerHTML = renderChartLines(s.chart, state.transpose, preferFlats);
+    } else {
+      box.innerHTML = '<div class="meta-line">No chart to show yet.</div>';
+    }
+  }
+
+  $("transUp").addEventListener("click", function () { state.transpose++; renderSongView(); });
+  $("transDown").addEventListener("click", function () { state.transpose--; renderSongView(); });
+  $("fontUp").addEventListener("click", function () { state.fontSize = Math.min(28, state.fontSize + 2); renderSongView(); });
+  $("fontDown").addEventListener("click", function () { state.fontSize = Math.max(11, state.fontSize - 2); renderSongView(); });
+
+  function stopAutoscroll() {
+    state.autoscroll = false;
+    $("btnAutoscroll").innerHTML = "&#9654; Autoscroll";
+    $("scrollSpeedGroup").hidden = true;
+    if (state.scrollTimer) { clearInterval(state.scrollTimer); state.scrollTimer = null; }
+  }
+  $("btnAutoscroll").addEventListener("click", function () {
+    if (state.autoscroll) { stopAutoscroll(); return; }
+    state.autoscroll = true;
+    $("btnAutoscroll").innerHTML = "&#10074;&#10074; Stop";
+    $("scrollSpeedGroup").hidden = false;
+    state.scrollTimer = setInterval(function () {
+      var speed = parseInt($("scrollSpeed").value, 10) || 4;
+      window.scrollBy(0, speed * 0.4);
+    }, 40);
+  });
+
+  /* ============================== METRONOME ============================== */
+  state.metroBpm = 90; state.metroRunning = false; state.metroTimer = null; state.metroSound = false; state.metroAudioCtx = null; state.metroSaveTimer = null;
+
+  function playClick() {
+    try {
+      if (!state.metroAudioCtx) state.metroAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var ctx = state.metroAudioCtx;
+      var t = ctx.currentTime;
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.frequency.value = 1000;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.35, t + 0.002);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t); osc.stop(t + 0.06);
+    } catch (e) {}
+  }
+  function metroBeat() {
+    var pulse = $("metroPulse");
+    pulse.classList.add("beat");
+    setTimeout(function () { pulse.classList.remove("beat"); }, Math.min(120, 60000 / state.metroBpm * 0.4));
+    if (state.metroSound) playClick();
+  }
+  function stopMetronome() {
+    state.metroRunning = false;
+    if (state.metroTimer) { clearInterval(state.metroTimer); state.metroTimer = null; }
+    var btn = $("metroToggle");
+    if (btn) btn.innerHTML = "&#9654; Start";
+  }
+  function startMetronome() {
+    stopMetronome();
+    state.metroRunning = true;
+    $("metroToggle").innerHTML = "&#10074;&#10074; Stop";
+    metroBeat();
+    state.metroTimer = setInterval(metroBeat, 60000 / state.metroBpm);
+  }
+  function setBpm(n) {
+    state.metroBpm = Math.max(40, Math.min(240, n));
+    $("bpmVal").textContent = state.metroBpm;
+    if (state.metroRunning) startMetronome(); // restart at new tempo
+    if (state.songId) {
+      clearTimeout(state.metroSaveTimer);
+      var sid = state.songId, bpm = state.metroBpm;
+      state.metroSaveTimer = setTimeout(function () {
+        apiFetch("PATCH", "/api/songs/" + sid, { bpm: bpm }).then(function (updated) {
+          var idx = songs.findIndex(function (s) { return s.id === sid; });
+          if (idx !== -1) songs[idx] = updated;
+        }).catch(function () {});
+      }, 600);
+    }
+  }
+  $("metroToggle").addEventListener("click", function () { state.metroRunning ? stopMetronome() : startMetronome(); });
+  $("bpmUp").addEventListener("click", function () { setBpm(state.metroBpm + 1); });
+  $("bpmDown").addEventListener("click", function () { setBpm(state.metroBpm - 1); });
+  $("metroSound").addEventListener("click", function () {
+    state.metroSound = !state.metroSound;
+    $("metroSound").classList.toggle("muted", !state.metroSound);
+    $("metroSound").innerHTML = state.metroSound ? "&#128266;" : "&#128264;";
+  });
+
+  /* ============================== ADD TO SUNDAY (from song view) ============================== */
+  $("btnAddToSunday").addEventListener("click", function () {
+    openLogSundayModal({ preselectSongId: state.songId });
+  });
+
+  /* ============================== TRACKER RENDER ============================== */
+  function computeStats() {
+    var counts = {};
+    sundays.forEach(function (s) { (s.songs || []).forEach(function (e) { counts[e.songId || e.title] = (counts[e.songId || e.title] || 0) + 1; }); });
+    var top = Object.keys(counts).map(function (k) {
+      var song = songs.find(function (s) { return s.id === k; });
+      return { id: k, title: song ? song.title : (k || "Untitled"), count: counts[k] };
+    }).sort(function (a, b) { return b.count - a.count; }).slice(0, 5);
+    return { totalSundays: sundays.length, librarySize: songs.length, top: top };
+  }
+  function renderTracker() {
+    var stats = computeStats();
+    var maxCount = stats.top.length ? stats.top[0].count : 1;
+    $("statsGrid").innerHTML =
+      '<div class="stat-tile"><div class="num">' + stats.totalSundays + '</div><div class="lbl">Sundays logged</div></div>' +
+      '<div class="stat-tile"><div class="num">' + stats.librarySize + '</div><div class="lbl">Songs in library</div></div>' +
+      '<div class="stat-tile" style="grid-column: span 2;">' +
+      '<div class="lbl" style="margin-bottom:8px;">Most played</div>' +
+      '<div class="top-songs-list">' +
+      (stats.top.length ? stats.top.map(function (t, i) {
+        return '<div class="trow"><span class="n">' + (i + 1) + '.</span><span style="flex:1">' + esc(t.title) + '</span><div class="bar"><i style="width:' + (t.count / maxCount * 100) + '%"></i></div><span class="count">' + t.count + "&times;</span></div>";
+      }).join("") : '<div class="meta-line">Log a Sunday to see trends here.</div>') +
+      "</div></div>";
+
+    var list = $("sundayList");
+    $("trackerEmpty").hidden = sundays.length !== 0;
+    list.innerHTML = sundays.map(function (s) {
+      return '<div class="sunday-card" data-id="' + s.id + '">' +
+        '<div class="card-top"><div class="sunday-date">' + fmtDate(s.date) + "</div>" +
+        '<div class="row">' +
+        (s.leader ? '<span class="chip">Led by ' + esc(s.leader) + "</span>" : "") +
+        '<button class="icon-btn" data-editsun="' + s.id + '">Edit</button>' +
+        '<button class="icon-btn" data-delsun="' + s.id + '">Delete</button>' +
+        "</div></div>" +
+        '<div class="sunday-songs">' +
+        (s.songs || []).map(function (e) {
+          return '<div class="sunday-song-row"><span class="title">' + esc(e.title) + "</span>" +
+            (e.key ? '<span class="detail">Key ' + esc(e.key) + "</span>" : "") +
+            (e.leader ? '<span class="detail">&middot; ' + esc(e.leader) + "</span>" : "") +
+            (e.notes ? '<span class="detail">&middot; ' + esc(e.notes) + "</span>" : "") +
+            "</div>";
+        }).join("") +
+        "</div>" +
+        (s.notes ? '<div class="sunday-notes">' + esc(s.notes) + "</div>" : "") +
+        "</div>";
+    }).join("");
+  }
+  $("sundayList").addEventListener("click", function (e) {
+    var edit = e.target.closest("[data-editsun]");
+    if (edit) { openLogSundayModal({ editId: edit.getAttribute("data-editsun") }); return; }
+    var del = e.target.closest("[data-delsun]");
+    if (del) {
+      var id = del.getAttribute("data-delsun");
+      showConfirmModal("Delete this Sunday's log?", "Delete", function () {
+        apiFetch("DELETE", "/api/sundays/" + id)
+          .then(function () { return loadAll(); })
+          .then(function () { showToast("Sunday log deleted"); })
+          .catch(function (e2) { showToast(e2.message, true); });
+      });
+    }
+  });
+  $("btnLogSunday").addEventListener("click", function () { openLogSundayModal({}); });
+
+  /* ============================== LOG-A-SUNDAY MODAL ============================== */
+  function songOptionsHtml(selectedId) {
+    return '<option value="">Choose a song…</option>' + songs.map(function (s) {
+      return '<option value="' + s.id + '"' + (s.id === selectedId ? " selected" : "") + ">" + esc(s.title) + "</option>";
+    }).join("");
+  }
+  function songEntryRowHtml(entry) {
+    entry = entry || {};
+    var rid = "r" + uid();
+    return '<div class="song-entry-row" data-rid="' + rid + '">' +
+      '<div class="field-row">' +
+      '<div class="field" style="flex:2"><label>Song</label><select class="e_song">' + songOptionsHtml(entry.songId) + "</select></div>" +
+      '<div class="field"><label>Key</label><input type="text" list="key-options" class="e_key" value="' + esc(entry.key || "") + '"></div>' +
+      "</div>" +
+      '<div class="field-row">' +
+      '<div class="field"><label>Led by</label><input type="text" class="e_leader" value="' + esc(entry.leader || "") + '" placeholder="Name"></div>' +
+      '<div class="field"><label>Notes</label><input type="text" class="e_notes" value="' + esc(entry.notes || "") + '" placeholder="optional"></div>' +
+      "</div>" +
+      '<button type="button" class="remove-row-btn" data-removerow="' + rid + '">Remove song</button>' +
+      "</div>";
+  }
+  function openLogSundayModal(opts) {
+    var editing = opts.editId ? sundays.find(function (s) { return s.id === opts.editId; }) : null;
+    var initialEntries = editing ? editing.songs.slice() : (opts.preselectSongId ? [{ songId: opts.preselectSongId, key: (songs.find(function(s){return s.id===opts.preselectSongId;})||{}).defaultKey }] : [{}]);
+    var html =
+      '<div class="modal-backdrop" id="mb"><div class="modal" style="max-width:600px;">' +
+      "<h2>" + (editing ? "Edit Sunday" : "Log a Sunday") + "</h2>" +
+      '<div class="field-row">' +
+      '<div class="field"><label>Date</label><input type="date" id="s_date" value="' + esc(editing ? editing.date : nextSundayISO()) + '"></div>' +
+      '<div class="field"><label>Worship leader (optional)</label><input type="text" id="s_leader" value="' + esc(editing ? editing.leader : "") + '"></div>' +
+      "</div>" +
+      '<div id="entriesWrap">' + initialEntries.map(songEntryRowHtml).join("") + "</div>" +
+      '<button type="button" class="btn ghost small" id="addRow">+ Add another song</button>' +
+      '<div class="field" style="margin-top:12px;"><label>Service notes (optional)</label><textarea id="s_notes">' + esc(editing ? editing.notes : "") + "</textarea></div>" +
+      '<div id="sModalMsg" style="font-size:0.82rem;color:var(--text-dim);min-height:18px;"></div>' +
+      '<div class="modal-actions">' +
+      '<button class="btn ghost" id="mCancel">Cancel</button>' +
+      '<button class="btn primary" id="mSave">' + (editing ? "Save changes" : "Save Sunday") + "</button>" +
+      "</div></div></div>";
+    $("modalRoot").innerHTML = html;
+    $("mCancel").onclick = closeModal;
+    $("mb").addEventListener("click", function (e) { if (e.target.id === "mb") closeModal(); });
+    $("addRow").onclick = function () { $("entriesWrap").insertAdjacentHTML("beforeend", songEntryRowHtml({})); };
+    $("entriesWrap").addEventListener("click", function (e) {
+      var rm = e.target.closest("[data-removerow]");
+      if (rm) { var row = $("entriesWrap").querySelector('[data-rid="' + rm.getAttribute("data-removerow") + '"]'); if (row) row.remove(); }
+    });
+    $("entriesWrap").addEventListener("change", function (e) {
+      if (e.target.classList.contains("e_song")) {
+        var row = e.target.closest(".song-entry-row");
+        var song = songs.find(function (s) { return s.id === e.target.value; });
+        var keyInput = row.querySelector(".e_key");
+        if (song && !keyInput.value) keyInput.value = song.defaultKey || "";
+      }
+    });
+    $("mSave").onclick = function () { saveSundayModal(editing); };
+  }
+
+  function saveSundayModal(editing) {
+    var date = $("s_date").value;
+    var msg = $("sModalMsg");
+    if (!date) { msg.textContent = "Please choose a date."; return; }
+    var rows = Array.prototype.slice.call($("entriesWrap").querySelectorAll(".song-entry-row"));
+    var entries = [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var songId = row.querySelector(".e_song").value;
+      if (!songId) continue;
+      var song = songs.find(function (s) { return s.id === songId; });
+      entries.push({
+        songId: songId,
+        title: song ? song.title : "Untitled",
+        key: row.querySelector(".e_key").value.trim(),
+        leader: row.querySelector(".e_leader").value.trim(),
+        notes: row.querySelector(".e_notes").value.trim(),
+      });
+    }
+    if (!entries.length) { msg.textContent = "Add at least one song."; return; }
+    var data = { date: date, leader: $("s_leader").value.trim(), notes: $("s_notes").value.trim(), songs: entries };
+    $("mSave").disabled = true;
+    var req = editing ? apiFetch("PATCH", "/api/sundays/" + editing.id, data) : apiFetch("POST", "/api/sundays", data);
+    req.then(function () { return loadAll(); }).then(closeModal)
+      .catch(function (e) { msg.textContent = e.message; $("mSave").disabled = false; });
+  }
+
+  /* ============================== TABS ============================== */
+  function setTab(tab) {
+    state.tab = tab;
+    $("view-library").hidden = tab !== "library";
+    $("view-song").hidden = tab !== "song";
+    $("view-tracker").hidden = tab !== "tracker";
+    $("tabs").hidden = tab === "song";
+    document.querySelectorAll(".tab-btn").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-tab") === tab);
+    });
+    if (tab !== "song") { stopAutoscroll(); stopMetronome(); }
+  }
+  document.querySelectorAll(".tab-btn").forEach(function (b) {
+    b.addEventListener("click", function () { setTab(b.getAttribute("data-tab")); });
+  });
+
+  /* ============================== BOOT ============================== */
+  renderLibrary();
+  renderTracker();
+  loadAll().then(finishInit);
+})();
+</script>
+</body>
+</html>

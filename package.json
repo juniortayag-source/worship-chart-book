@@ -1,0 +1,9 @@
+{
+  "name": "worship-chart-book",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Worship team chord chart library and Sunday setlist tracker.",
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
