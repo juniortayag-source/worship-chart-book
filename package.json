@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "description": "Worship team chord chart library and Sunday setlist tracker.",
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "@vercel/blob": "^2.8.2"
   }
 }

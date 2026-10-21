@@ -212,6 +212,29 @@
 
   .searchbar { max-width: 320px; }
   .remove-row-btn { color: var(--danger); background: none; border: none; font-size: 0.78rem; font-weight: 600; }
+
+  /* Image chart pages + chord tagging */
+  .chart-page-wrap { position: relative; display: block; line-height: 0; margin-bottom: 18px; }
+  .chart-page-wrap img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; user-select: none; }
+  #taggerStage .chart-page-wrap img { cursor: crosshair; }
+  .chord-tag {
+    position: absolute; transform: translate(0, -50%); background: var(--chord); color: #fff;
+    font-family: var(--font-mono); font-weight: 700; font-size: var(--chart-font-size);
+    padding: 1px 6px; border-radius: 5px; line-height: 1.5; white-space: nowrap; cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35); z-index: 2;
+  }
+  .chord-tag:hover { outline: 2px solid #fff; outline-offset: 1px; }
+  .chord-overlay {
+    position: absolute; transform: translate(0, -50%); background: #fff; color: var(--chord);
+    font-family: var(--font-mono); font-weight: 700; font-size: var(--chart-font-size);
+    padding: 0 4px; border-radius: 3px; line-height: 1.3; white-space: nowrap; pointer-events: none;
+  }
+  .tag-input-popover {
+    position: absolute; z-index: 10; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: var(--shadow); padding: 7px; display: flex; gap: 5px; align-items: center;
+  }
+  .tag-input-popover input { width: 84px; padding: 6px 8px; }
+  .tagger-hint { color: var(--text-dim); font-size: 0.85rem; margin: 2px 0 10px; }
 </style>
 </head>
 <body>
@@ -261,6 +284,7 @@
       </div>
       <div class="row">
         <span class="chip key" id="songKeyChip"></span>
+        <button class="btn ghost small" id="btnEditChords" hidden>Edit chords</button>
         <button class="btn ghost small" id="btnEditSong">Edit song</button>
         <button class="btn small" id="btnAddToSunday">+ Add to a Sunday</button>
       </div>
@@ -314,6 +338,25 @@
     <div class="chart-scroll"><div id="chartBox" class="chart-box"></div></div>
   </div>
 
+  <!-- TAGGER VIEW -->
+  <div id="view-tagger" hidden>
+    <button class="btn ghost small" id="btnTaggerDone">&larr; Done tagging</button>
+    <div class="song-header">
+      <div>
+        <h2 id="taggerTitle"></h2>
+        <div class="tagger-hint">Tap anywhere a chord appears on the image and type it. Tap an existing tag to edit or remove it.</div>
+      </div>
+    </div>
+    <div class="controls-bar" id="taggerPageBar" hidden>
+      <div class="control-group">
+        <button class="btn small" id="taggerPrevPage">&larr; Prev page</button>
+        <span class="label-txt" id="taggerPageLabel"></span>
+        <button class="btn small" id="taggerNextPage">Next page &rarr;</button>
+      </div>
+    </div>
+    <div class="chart-scroll"><div id="taggerStage"></div></div>
+  </div>
+
   <!-- TRACKER VIEW -->
   <div id="view-tracker" hidden>
     <div class="stats-grid" id="statsGrid"></div>
@@ -348,216 +391,8 @@
     if (CHORD_TOKEN_ALLOW[tok]) return true;
     return CHORD_RE.test(tok);
   }
-  function isChordLineTokens(tokens) {
-    if (tokens.length === 0) return false;
-    var chordish = 0;
-    for (var i = 0; i < tokens.length; i++) if (isChordToken(tokens[i].text)) chordish++;
-    var allowStray = tokens.length > 4 ? 1 : 0;
-    return chordish >= tokens.length - allowStray && chordish > 0;
-  }
-  function groupIntoLines(items, yTolerance) {
-    yTolerance = yTolerance || 2.5;
-    var withPos = [];
-    for (var i = 0; i < items.length; i++) {
-      var it = items[i];
-      if (!it.str || !it.str.trim()) continue;
-      withPos.push({ text: it.str, x: it.transform[4], y: it.transform[5], width: it.width });
-    }
-    withPos.sort(function (a, b) { return b.y - a.y || a.x - b.x; });
-    var lines = [];
-    for (var j = 0; j < withPos.length; j++) {
-      var item = withPos[j];
-      var line = null;
-      for (var k = 0; k < lines.length; k++) {
-        if (Math.abs(lines[k].y - item.y) <= yTolerance) { line = lines[k]; break; }
-      }
-      if (!line) { line = { y: item.y, items: [] }; lines.push(line); }
-      line.items.push(item);
-    }
-    lines.sort(function (a, b) { return b.y - a.y; });
-    lines.forEach(function (l) { l.items.sort(function (a, b) { return a.x - b.x; }); });
-    return lines;
-  }
-  function tokenizeLine(line) {
-    var tokens = [];
-    for (var i = 0; i < line.items.length; i++) {
-      var item = line.items[i];
-      var chars = item.text;
-      var charW = chars.length ? item.width / chars.length : 0;
-      var idx = 0;
-      while (idx < chars.length) {
-        while (idx < chars.length && chars[idx] === " ") idx++;
-        if (idx >= chars.length) break;
-        var start = idx;
-        while (idx < chars.length && chars[idx] !== " ") idx++;
-        tokens.push({ text: chars.slice(start, idx), x: item.x + start * charW });
-      }
-    }
-    tokens.sort(function (a, b) { return a.x - b.x; });
-    return tokens;
-  }
-  // Reconstruct a lyric line's text + per-character x positions, inserting a
-  // space wherever two text items don't visually touch (fixes word-merging
-  // like "BlessedbeYour" when a PDF emits each word as its own text-show op).
-  function charMapForLine(line) {
-    var totalW = 0, totalC = 0, i;
-    for (i = 0; i < line.items.length; i++) { totalW += line.items[i].width; totalC += line.items[i].text.length; }
-    var lineAvgCharW = totalC ? totalW / totalC : 6;
-    var text = "", xs = [], lastEnd = null;
-    for (i = 0; i < line.items.length; i++) {
-      var item = line.items[i];
-      var chars = item.text;
-      var itemCharW = chars.length ? item.width / chars.length : lineAvgCharW;
-      if (lastEnd !== null) {
-        var gap = item.x - lastEnd;
-        var threshold = Math.min(itemCharW, lineAvgCharW) * 0.35;
-        if (gap > threshold) {
-          var spaceCount = gap > lineAvgCharW * 1.8 ? Math.min(8, Math.max(1, Math.round(gap / lineAvgCharW))) : 1;
-          for (var s = 0; s < spaceCount; s++) { text += " "; xs.push(lastEnd + (gap * (s + 1)) / (spaceCount + 1)); }
-        }
-      }
-      for (var c = 0; c < chars.length; c++) { text += chars[c]; xs.push(item.x + c * itemCharW); }
-      lastEnd = item.x + item.width;
-    }
-    return { text: text, xs: xs };
-  }
-  function nearestCharIndex(xs, targetX) {
-    if (xs.length === 0) return 0;
-    var best = 0, bestDist = Infinity;
-    for (var i = 0; i < xs.length; i++) {
-      var d = Math.abs(xs[i] - targetX);
-      if (d < bestDist) { bestDist = d; best = i; }
-    }
-    return best;
-  }
   var HEADER_RE = /^\[?(verse|chorus|bridge|pre-?chorus|intro|outro|tag|ending|interlude|refrain|vamp)\b.*\]?$/i;
   function isHeaderLine(text) { return HEADER_RE.test(text.trim()) && text.trim().length < 40; }
-
-  // Row-local-break clustering: for each row, collect every internal x-gap
-  // wide enough to be a column break, and note where the second segment
-  // starts. If that x recurs at roughly the same position across many rows,
-  // that's almost certainly a real 2-column gutter.
-  function findColumnGutter(rows, pageWidth) {
-    if (!pageWidth || rows.length === 0) return null;
-    var loBound = pageWidth * 0.15, hiBound = pageWidth * 0.85;
-    var breakXs = [];
-    for (var r = 0; r < rows.length; r++) {
-      var row = rows[r];
-      if (row.items.length < 2) continue;
-      var totalW = 0, totalC = 0;
-      for (var i = 0; i < row.items.length; i++) { totalW += row.items[i].width; totalC += row.items[i].text.length; }
-      var avgW = totalC ? totalW / totalC : 6;
-      var minGap = Math.max(18, avgW * 2.4);
-      for (var k = 0; k < row.items.length - 1; k++) {
-        var gap = row.items[k + 1].x - (row.items[k].x + row.items[k].width);
-        if (gap > minGap) {
-          var breakX = row.items[k + 1].x;
-          if (breakX > loBound && breakX < hiBound) breakXs.push(breakX);
-        }
-      }
-    }
-    if (breakXs.length < 3) return null;
-    var buckets = {};
-    for (i = 0; i < breakXs.length; i++) {
-      var b = Math.round(breakXs[i] / 6) * 6;
-      buckets[b] = (buckets[b] || 0) + 1;
-    }
-    var bestBucket = null, bestCount = 0;
-    for (var key in buckets) {
-      if (buckets[key] > bestCount) { bestCount = buckets[key]; bestBucket = Number(key); }
-    }
-    var near = breakXs.filter(function (x) { return Math.abs(x - bestBucket) <= 15; });
-    var minRowsNeeded = Math.max(3, Math.ceil(rows.length * 0.12));
-    if (near.length < minRowsNeeded) return null;
-    var sum = 0;
-    for (i = 0; i < near.length; i++) sum += near[i];
-    return sum / near.length;
-  }
-
-  function linesFromRows(rows) {
-    var out = [];
-    for (var i = 0; i < rows.length; i++) {
-      var row = rows[i];
-      var tokens = tokenizeLine(row);
-      var lineText = tokens.map(function (t) { return t.text; }).join(" ");
-      if (tokens.length === 0) { out.push({ type: "blank" }); continue; }
-      if (isHeaderLine(lineText) && !isChordLineTokens(tokens)) { out.push({ type: "header", text: lineText.trim() }); continue; }
-      if (isChordLineTokens(tokens)) {
-        var next = rows[i + 1];
-        var nextTokens = next ? tokenizeLine(next) : [];
-        var nextText = nextTokens.map(function (t) { return t.text; }).join(" ");
-        var nextIsLyric = next && nextTokens.length > 0 && !isChordLineTokens(nextTokens) && !isHeaderLine(nextText);
-        if (nextIsLyric) {
-          var cm = charMapForLine(next);
-          var chordsArr = tokens.map(function (t) { return { index: nearestCharIndex(cm.xs, t.x), symbol: t.text }; });
-          out.push({ type: "lyric", text: cm.text, chords: chordsArr });
-          i++;
-        } else {
-          var totalW = 0, totalC = 0;
-          for (var ri = 0; ri < row.items.length; ri++) { totalW += row.items[ri].width; totalC += row.items[ri].text.length; }
-          var avgW = totalC ? totalW / totalC : 6;
-          var text = "", cursor = 0;
-          var baseX = tokens[0].x;
-          for (var ti = 0; ti < tokens.length; ti++) {
-            var t = tokens[ti];
-            var col = Math.round((t.x - baseX) / avgW);
-            while (cursor < col) { text += " "; cursor++; }
-            text += t.text; cursor += t.text.length;
-          }
-          out.push({ type: "chordOnly", text: text });
-        }
-        continue;
-      }
-      out.push({ type: "lyric", text: lineText, chords: [] });
-    }
-    return out;
-  }
-
-  function buildDisplayLines(items, pageWidth) {
-    var rows = groupIntoLines(items);
-    var gutterX = findColumnGutter(rows, pageWidth);
-    if (gutterX == null) return linesFromRows(rows);
-
-    var leftRows = [], rightRows = [], fullRows = [];
-    for (var i = 0; i < rows.length; i++) {
-      var row = rows[i];
-      var left = [], right = [], straddling = false;
-      for (var j = 0; j < row.items.length; j++) {
-        var it = row.items[j];
-        if (it.x < gutterX && it.x + it.width > gutterX) { straddling = true; break; }
-        if (it.x + it.width <= gutterX) left.push(it);
-        else if (it.x >= gutterX) right.push(it);
-      }
-      if (straddling) {
-        fullRows.push(row);
-      } else if (left.length && right.length) {
-        leftRows.push({ y: row.y, items: left });
-        rightRows.push({ y: row.y, items: right });
-      } else if (left.length) {
-        leftRows.push({ y: row.y, items: left });
-      } else if (right.length) {
-        rightRows.push({ y: row.y, items: right });
-      }
-    }
-    var colYs = leftRows.concat(rightRows).map(function (r) { return r.y; });
-    var colMaxY = colYs.length ? Math.max.apply(null, colYs) : Infinity;
-    var colMinY = colYs.length ? Math.min.apply(null, colYs) : -Infinity;
-    var preamble = [], postamble = [];
-    for (var fi = 0; fi < fullRows.length; fi++) {
-      var frow = fullRows[fi];
-      if (frow.y >= colMaxY) preamble.push(frow);
-      else if (frow.y <= colMinY) postamble.push(frow);
-      else (colMaxY - frow.y <= frow.y - colMinY ? preamble : postamble).push(frow);
-    }
-    var out = linesFromRows(preamble);
-    if (preamble.length) out.push({ type: "blank" });
-    out = out.concat(linesFromRows(leftRows));
-    if (leftRows.length && rightRows.length) out.push({ type: "blank" });
-    out = out.concat(linesFromRows(rightRows));
-    if (postamble.length) out.push({ type: "blank" });
-    out = out.concat(linesFromRows(postamble));
-    return out;
-  }
 
   var SHARP_SCALE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   var FLAT_SCALE = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
@@ -649,57 +484,88 @@
   }
 
   /* ============================== PDF PROCESSING ============================== */
-  // The PDF never leaves the browser: it's only used here to extract text,
-  // which becomes the stored chart. The file itself is discarded afterward
-  // and never uploaded anywhere.
+  // The original PDF file never leaves the browser and is never uploaded or
+  // stored anywhere. Each page is rendered to a plain image (canvas → JPEG)
+  // right here in the browser; only that rendered image is saved, to Vercel
+  // Blob storage. Chords are then tagged by hand on top of the image (see
+  // the tagger view below) so transposing can update them.
   if (window.pdfjsLib) {
     try {
       pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
     } catch (e) {}
   }
 
-  var TEMPO_RE = /\b(?:tempo|bpm)\b\D{0,6}(\d{2,3})|(\d{2,3})\s*bpm\b/i;
-  function processPdfFile(file, progressCb) {
+  var PAGE_IMAGE_TARGET_LONG_SIDE = 2000; // px
+  var PAGE_IMAGE_MAX_BYTES = 3000000; // keep comfortably under Vercel's request-body limit
+
+  function renderPdfPageToCanvas(page) {
+    var unscaled = page.getViewport({ scale: 1 });
+    var longSide = Math.max(unscaled.width, unscaled.height);
+    var scale = Math.min(3, Math.max(0.5, PAGE_IMAGE_TARGET_LONG_SIDE / longSide));
+    var viewport = page.getViewport({ scale: scale });
+    var canvas = document.createElement("canvas");
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    var ctx = canvas.getContext("2d");
+    return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function () {
+      return canvas;
+    });
+  }
+  function canvasToCompressedBlob(canvas) {
+    var qualities = [0.85, 0.75, 0.65, 0.55, 0.45];
+    function tryAt(i) {
+      return new Promise(function (resolve, reject) {
+        canvas.toBlob(function (blob) {
+          if (!blob) { reject(new Error("Could not encode page image")); return; }
+          if (blob.size <= PAGE_IMAGE_MAX_BYTES || i === qualities.length - 1) resolve(blob);
+          else resolve(tryAt(i + 1));
+        }, "image/jpeg", qualities[i]);
+      });
+    }
+    return tryAt(0);
+  }
+  function blobToBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result).split(",")[1] || ""); };
+      reader.onerror = function () { reject(new Error("Could not read rendered image")); };
+      reader.readAsDataURL(blob);
+    });
+  }
+  function uploadPageImage(blob, filename) {
+    return blobToBase64(blob).then(function (b64) {
+      return apiFetch("POST", "/api/blob-upload", { filename: filename, contentType: blob.type || "image/jpeg", dataBase64: b64 });
+    });
+  }
+
+  // Renders every page of the PDF to an image and uploads each one, returning
+  // { pages: [{url,width,height,tags:[]}], pageCount }. Nothing from the PDF
+  // itself — text or binary — is kept past this function.
+  function processPdfToPages(file, progressCb) {
     return file.arrayBuffer().then(function (buf) {
       return pdfjsLib.getDocument({ data: buf }).promise.then(function (doc) {
-        var detectedBpm = null;
         var chain = Promise.resolve();
-        var pageResults = [];
-        var totalChars = 0;
+        var pages = [];
         for (var p = 1; p <= doc.numPages; p++) {
           (function (pageNum) {
             chain = chain.then(function () {
-              if (progressCb) progressCb("Reading page " + pageNum + " of " + doc.numPages + "…");
+              if (progressCb) progressCb("Rendering page " + pageNum + " of " + doc.numPages + "…");
               return doc.getPage(pageNum).then(function (page) {
-                var pageWidth = page.getViewport({ scale: 1 }).width;
-                return page.getTextContent().then(function (content) {
-                  var lines = buildDisplayLines(content.items, pageWidth);
-                  lines.forEach(function (l) {
-                    if (l.type === "lyric" || l.type === "chordOnly" || l.type === "header") {
-                      var t = l.text || "";
-                      totalChars += (l.type !== "header" ? t.trim().length : 0);
-                      if (detectedBpm === null) {
-                        var m = t.match(TEMPO_RE);
-                        if (m) {
-                          var n = parseInt(m[1] || m[2], 10);
-                          if (n >= 40 && n <= 240) detectedBpm = n;
-                        }
-                      }
-                    }
+                return renderPdfPageToCanvas(page).then(function (canvas) {
+                  var width = canvas.width, height = canvas.height;
+                  return canvasToCompressedBlob(canvas).then(function (blob) {
+                    if (progressCb) progressCb("Uploading page " + pageNum + " of " + doc.numPages + "…");
+                    var filename = "chart-pages/" + uid() + "-p" + pageNum + ".jpg";
+                    return uploadPageImage(blob, filename).then(function (result) {
+                      pages.push({ url: result.url, width: width, height: height, tags: [] });
+                    });
                   });
-                  pageResults.push(lines);
                 });
               });
             });
           })(p);
         }
-        return chain.then(function () {
-          // A PDF with hardly any extractable text is almost always a scanned
-          // image rather than real text — nothing useful to show, and since
-          // we don't keep the original file there's no image fallback either.
-          var sparse = totalChars < 15 * doc.numPages || totalChars < 15;
-          return { chart: pageResults, parseFailed: sparse, pageCount: doc.numPages, detectedBpm: detectedBpm };
-        });
+        return chain.then(function () { return { pages: pages, pageCount: doc.numPages }; });
       });
     });
   }
@@ -875,7 +741,7 @@
       "</div>" +
       '<div class="field"><label>Tags (comma separated)</label><input type="text" id="f_tags" value="' + esc(editing && editing.tags ? editing.tags.join(", ") : "") + '" placeholder="fast, communion"></div>' +
       '<div class="field"><label>' + (editing ? "Replace chord chart PDF (optional)" : "Chord chart PDF (optional)") + "</label>" +
-      '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">Only the text is read from the PDF to build the chart below — the file itself is never uploaded or stored.</div>' +
+      '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">Each page is rendered to an image right here in your browser and only that image is saved — the PDF file itself is never uploaded or stored. After saving, you\'ll tap each chord once on the image so transposing can update it.</div>' +
       '<input type="file" id="f_pdf" accept="application/pdf,.pdf"></div>' +
       '<div class="field">' +
       '<label>Or type lyrics &amp; chords by hand</label>' +
@@ -944,28 +810,33 @@
     saveBtn.disabled = true;
     var base = { title: title, artist: artist, defaultKey: key, tags: tags };
 
-    function finish(extra) {
+    function finish(extra, thenOpenTagger) {
       var data = Object.assign({}, base, extra || {});
       var req = editing ? apiFetch("PATCH", "/api/songs/" + editing.id, data) : apiFetch("POST", "/api/songs", data);
-      req.then(function () { return loadAll(); }).then(closeModal)
-        .catch(function (e) { msg.textContent = e.message; saveBtn.disabled = false; });
+      req.then(function (saved) {
+        return loadAll().then(function () {
+          closeModal();
+          if (thenOpenTagger) openTagger(saved.id);
+        });
+      }).catch(function (e) { msg.textContent = e.message; saveBtn.disabled = false; });
+    }
+
+    if (file) {
+      msg.textContent = "Rendering page 1…";
+      processPdfToPages(file, function (t) { msg.textContent = t; }).then(function (result) {
+        finish({ sourceType: "image", pages: result.pages, pageCount: result.pageCount, chart: null, parseFailed: false }, true);
+      }).catch(function (e) {
+        msg.textContent = "Couldn't read that PDF (" + e.message + "). Try a different file.";
+        saveBtn.disabled = false;
+      });
+      return;
     }
 
     if (manualEdited) {
-      finish({ chart: parseManualChart(chartText), parseFailed: false });
+      finish({ sourceType: "text", chart: parseManualChart(chartText), pages: null, parseFailed: false });
       return;
     }
-    if (!file) { finish(); return; }
-
-    msg.textContent = "Reading chart…";
-    processPdfFile(file, function (t) { msg.textContent = t; }).then(function (parsed) {
-      var extra = { chart: parsed.chart, parseFailed: parsed.parseFailed, pageCount: parsed.pageCount };
-      if (parsed.detectedBpm && !(editing && editing.bpm)) extra.bpm = parsed.detectedBpm;
-      finish(extra);
-    }).catch(function (e) {
-      msg.textContent = "Couldn't read that PDF (" + e.message + "). Saving without a parsed chart.";
-      finish({ parseFailed: true });
-    });
+    finish();
   }
 
   $("btnAddSong").addEventListener("click", function () { openSongModal(null); });
@@ -1033,6 +904,7 @@
     document.documentElement.style.setProperty("--chart-font-size", state.fontSize + "px");
 
     $("bpmVal").textContent = state.metroBpm;
+    $("btnEditChords").hidden = s.sourceType !== "image";
 
     var note = $("parseNote");
     if (s.parseFailed) {
@@ -1043,12 +915,150 @@
     }
 
     var box = $("chartBox");
-    if (s.chart && s.chart.length) {
+    if (s.sourceType === "image" && s.pages && s.pages.length) {
+      box.innerHTML = renderImagePages(s.pages, state.transpose, preferFlats);
+    } else if (s.chart && s.chart.length) {
       box.innerHTML = renderChartLines(s.chart, state.transpose, preferFlats);
     } else {
       box.innerHTML = '<div class="meta-line">No chart to show yet.</div>';
     }
   }
+
+  function renderImagePages(pages, semitones, preferFlats) {
+    return pages.map(function (page, idx) {
+      var tagsHtml = (page.tags || []).map(function (t) {
+        if (!semitones) return ""; // untransposed: the printed chord on the image is already correct
+        var sym = transposeChord(t.chord, semitones, preferFlats);
+        return '<span class="chord-overlay" style="left:' + t.xPct + '%;top:' + t.yPct + '%;">' + esc(sym) + "</span>";
+      }).join("");
+      return (
+        (idx > 0 ? '<div class="page-divider">Page ' + (idx + 1) + "</div>" : "") +
+        '<div class="chart-page-wrap"><img src="' + esc(page.url) + '" draggable="false" alt="Chord chart page ' + (idx + 1) + '">' + tagsHtml + "</div>"
+      );
+    }).join("");
+  }
+
+  $("btnEditChords").addEventListener("click", function () { if (state.songId) openTagger(state.songId); });
+
+  /* ============================== CHORD TAGGER ============================== */
+  // Lets you tap chords directly on a rendered page image so transposing can
+  // update them. Works on a local copy of the song's pages until "Done
+  // tagging" saves it back.
+  var tagger = null; // { songId, pages, pageIndex }
+
+  function openTagger(songId) {
+    var s = songs.find(function (x) { return x.id === songId; });
+    if (!s || !s.pages || !s.pages.length) { showToast("No page images to tag yet.", true); return; }
+    tagger = { songId: songId, pages: JSON.parse(JSON.stringify(s.pages)), pageIndex: 0 };
+    $("taggerTitle").textContent = s.title || "Untitled";
+    setTab("tagger");
+    renderTaggerPage();
+  }
+
+  function renderTaggerPage() {
+    if (!tagger) return;
+    var total = tagger.pages.length;
+    $("taggerPageBar").hidden = total <= 1;
+    $("taggerPageLabel").textContent = "Page " + (tagger.pageIndex + 1) + " of " + total;
+    $("taggerPrevPage").disabled = tagger.pageIndex === 0;
+    $("taggerNextPage").disabled = tagger.pageIndex >= total - 1;
+
+    var page = tagger.pages[tagger.pageIndex];
+    page.tags = page.tags || [];
+    var stage = $("taggerStage");
+    stage.innerHTML =
+      '<div class="chart-page-wrap" id="taggerImgWrap">' +
+      '<img src="' + esc(page.url) + '" draggable="false">' +
+      page.tags.map(function (t) {
+        return '<div class="chord-tag" data-tagid="' + t.id + '" style="left:' + t.xPct + '%;top:' + t.yPct + '%;">' + esc(t.chord) + "</div>";
+      }).join("") +
+      "</div>";
+
+    var wrap = $("taggerImgWrap");
+    wrap.addEventListener("click", function (e) {
+      var rect = wrap.getBoundingClientRect();
+      var clickX = e.clientX - rect.left, clickY = e.clientY - rect.top;
+      var tagEl = e.target.closest(".chord-tag");
+      if (tagEl) {
+        e.stopPropagation();
+        var id = tagEl.getAttribute("data-tagid");
+        var existing = page.tags.find(function (t) { return t.id === id; });
+        if (!existing) return;
+        showTagPopover(clickX, clickY, existing.chord, {
+          onSave: function (value) { existing.chord = value; renderTaggerPage(); },
+          onDelete: function () {
+            page.tags = page.tags.filter(function (t) { return t.id !== id; });
+            renderTaggerPage();
+          },
+        });
+        return;
+      }
+      var xPct = (clickX / rect.width) * 100;
+      var yPct = (clickY / rect.height) * 100;
+      showTagPopover(clickX, clickY, "", {
+        onSave: function (value) {
+          page.tags.push({ id: uid(), xPct: xPct, yPct: yPct, chord: value });
+          renderTaggerPage();
+        },
+        onDelete: function () {},
+      });
+    });
+  }
+
+  function showTagPopover(x, y, initial, callbacks) {
+    closeTagPopover();
+    var isEditing = initial !== "";
+    var pop = document.createElement("div");
+    pop.className = "tag-input-popover";
+    pop.id = "tagPopover";
+    pop.style.left = x + "px";
+    pop.style.top = y + "px";
+    pop.innerHTML =
+      '<input type="text" id="tagPopInput" value="' + esc(initial) + '" placeholder="G, Am7…">' +
+      '<button class="btn small primary" id="tagPopSave" title="Save">&#10003;</button>' +
+      (isEditing ? '<button class="btn small danger" id="tagPopDelete" title="Remove">&times;</button>' : "") +
+      '<button class="btn small ghost" id="tagPopCancel">Cancel</button>';
+    $("taggerImgWrap").appendChild(pop);
+    pop.addEventListener("click", function (e) { e.stopPropagation(); });
+    var input = $("tagPopInput");
+    input.focus(); input.select();
+    function save() {
+      var v = input.value.trim();
+      if (!v) { closeTagPopover(); return; }
+      closeTagPopover();
+      callbacks.onSave(v);
+    }
+    $("tagPopSave").onclick = save;
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") save();
+      if (e.key === "Escape") closeTagPopover();
+    });
+    if (isEditing) $("tagPopDelete").onclick = function () { closeTagPopover(); callbacks.onDelete(); };
+    $("tagPopCancel").onclick = closeTagPopover;
+  }
+  function closeTagPopover() { var p = $("tagPopover"); if (p) p.remove(); }
+
+  $("taggerPrevPage").addEventListener("click", function () {
+    if (tagger && tagger.pageIndex > 0) { tagger.pageIndex--; renderTaggerPage(); }
+  });
+  $("taggerNextPage").addEventListener("click", function () {
+    if (tagger && tagger.pageIndex < tagger.pages.length - 1) { tagger.pageIndex++; renderTaggerPage(); }
+  });
+  $("btnTaggerDone").addEventListener("click", function () {
+    if (!tagger) { setTab("library"); return; }
+    var sid = tagger.songId, pages = tagger.pages;
+    $("btnTaggerDone").disabled = true;
+    apiFetch("PATCH", "/api/songs/" + sid, { pages: pages }).then(function () { return loadAll(); })
+      .then(function () {
+        tagger = null;
+        $("btnTaggerDone").disabled = false;
+        openSong(sid);
+      })
+      .catch(function (e) {
+        $("btnTaggerDone").disabled = false;
+        showToast("Couldn't save chord tags: " + e.message, true);
+      });
+  });
 
   $("transUp").addEventListener("click", function () { state.transpose++; renderSongView(); });
   $("transDown").addEventListener("click", function () { state.transpose--; renderSongView(); });
@@ -1292,7 +1302,8 @@
     $("view-library").hidden = tab !== "library";
     $("view-song").hidden = tab !== "song";
     $("view-tracker").hidden = tab !== "tracker";
-    $("tabs").hidden = tab === "song";
+    $("view-tagger").hidden = tab !== "tagger";
+    $("tabs").hidden = tab === "song" || tab === "tagger";
     document.querySelectorAll(".tab-btn").forEach(function (b) {
       b.classList.toggle("active", b.getAttribute("data-tab") === tab);
     });
