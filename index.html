@@ -235,6 +235,23 @@
   }
   .tag-input-popover input { width: 84px; padding: 6px 8px; }
   .tagger-hint { color: var(--text-dim); font-size: 0.85rem; margin: 2px 0 10px; }
+
+  /* Setlist (all songs for one Sunday, one scrollable page) */
+  .setlist-song-block { margin-bottom: 30px; padding-bottom: 22px; border-bottom: 1px dashed var(--border); }
+  .setlist-song-block:last-child { border-bottom: none; }
+  .setlist-song-block h3 { font-size: 1.25rem; margin-bottom: 2px; }
+  .setlist-song-block .meta-line { margin: 0 0 10px; }
+
+  /* Export to PDF via the browser's print dialog */
+  @media print {
+    button, .top, .tabs, #capBanner, .controls-bar, #parseNote, .tagger-hint, #taggerPageBar { display: none !important; }
+    body { padding: 0; background: #fff; }
+    .wrap { max-width: none; }
+    .chart-scroll { overflow: visible !important; padding-bottom: 0; }
+    .chart-page-wrap, .line-pair { page-break-inside: avoid; }
+    .section-header { page-break-after: avoid; }
+    .setlist-song-block + .setlist-song-block { page-break-before: always; }
+  }
 </style>
 </head>
 <body>
@@ -286,6 +303,7 @@
         <span class="chip key" id="songKeyChip"></span>
         <button class="btn ghost small" id="btnEditChords" hidden>Edit chords</button>
         <button class="btn ghost small" id="btnEditSong">Edit song</button>
+        <button class="btn ghost small" id="btnExportSongPdf">Export PDF</button>
         <button class="btn small" id="btnAddToSunday">+ Add to a Sunday</button>
       </div>
     </div>
@@ -357,6 +375,21 @@
     <div class="chart-scroll"><div id="taggerStage"></div></div>
   </div>
 
+  <!-- SETLIST VIEW (every song for one Sunday, in one scrollable page) -->
+  <div id="view-setlist" hidden>
+    <button class="btn ghost small" id="btnBackFromSetlist">&larr; Back</button>
+    <div class="song-header">
+      <div>
+        <h2 id="setlistTitle"></h2>
+        <div class="artist" id="setlistSubtitle"></div>
+      </div>
+      <div class="row">
+        <button class="btn small" id="btnExportSetlistPdf">Export PDF</button>
+      </div>
+    </div>
+    <div id="setlistBody"></div>
+  </div>
+
   <!-- TRACKER VIEW -->
   <div id="view-tracker" hidden>
     <div class="stats-grid" id="statsGrid"></div>
@@ -419,6 +452,22 @@
   function keyPrefersFlats(key) {
     if (!key) return false;
     return !!FLAT_KEY_ROOTS[key.trim()];
+  }
+  function keyRootIndex(key) {
+    if (!key) return null;
+    var m = String(key).trim().match(/^([A-G])(#|b)?/);
+    if (!m) return null;
+    return NOTE_INDEX[m[1] + (m[2] || "")];
+  }
+  // Shortest semitone shift (−6..6) from one key's root to another's, so a
+  // Sunday setlist can automatically show each song in whatever key was
+  // logged for that service, without anyone touching the transpose control.
+  function semitoneDiff(fromKey, toKey) {
+    var a = keyRootIndex(fromKey), b = keyRootIndex(toKey);
+    if (a == null || b == null) return 0;
+    var diff = ((b - a) % 12 + 12) % 12;
+    if (diff > 6) diff -= 12;
+    return diff;
   }
 
   /* ============================== APP STATE ============================== */
@@ -1060,6 +1109,65 @@
       });
   });
 
+  /* ============================== EXPORT TO PDF ============================== */
+  // No PDF library needed: the browser's own print dialog can "print to
+  // PDF", and the @media print rules above already hide all the app chrome
+  // and leave just the chart content.
+  function exportToPdf() {
+    showToast('Choose "Save as PDF" as the destination in the print dialog.');
+    setTimeout(function () { window.print(); }, 200);
+  }
+  $("btnExportSongPdf").addEventListener("click", exportToPdf);
+  $("btnExportSetlistPdf").addEventListener("click", exportToPdf);
+
+  /* ============================== SETLIST VIEW (one Sunday, all songs) ============================== */
+  function openSetlist(sundayId) {
+    var sun = sundays.find(function (x) { return x.id === sundayId; });
+    if (!sun) { setTab("tracker"); return; }
+    state.setlistId = sundayId;
+    $("setlistTitle").textContent = fmtDate(sun.date);
+    var bits = [];
+    if (sun.leader) bits.push("Led by " + sun.leader);
+    bits.push((sun.songs || []).length + " song" + ((sun.songs || []).length === 1 ? "" : "s"));
+    $("setlistSubtitle").textContent = bits.join(" · ");
+    setTab("setlist");
+    renderSetlist(sun);
+  }
+
+  function renderSetlist(sun) {
+    var body = $("setlistBody");
+    if (!sun.songs || !sun.songs.length) {
+      body.innerHTML = '<div class="meta-line">No songs logged for this Sunday yet.</div>';
+      return;
+    }
+    body.innerHTML = sun.songs.map(function (entry) {
+      var song = songs.find(function (s) { return s.id === entry.songId; });
+      var titleHtml = "<h3>" + esc(entry.title || (song ? song.title : "Untitled")) + "</h3>";
+      var metaBits = [];
+      if (entry.key) metaBits.push("Key " + esc(entry.key));
+      if (entry.leader) metaBits.push(esc(entry.leader));
+      if (entry.notes) metaBits.push(esc(entry.notes));
+      var metaHtml = metaBits.length ? '<div class="meta-line">' + metaBits.join(" &middot; ") + "</div>" : "";
+      var chartHtml;
+      if (!song) {
+        chartHtml = '<div class="meta-line">This song is no longer in your library.</div>';
+      } else {
+        var semitones = entry.key ? semitoneDiff(song.defaultKey, entry.key) : 0;
+        var preferFlats = keyPrefersFlats(entry.key || song.defaultKey);
+        if (song.sourceType === "image" && song.pages && song.pages.length) {
+          chartHtml = renderImagePages(song.pages, semitones, preferFlats);
+        } else if (song.chart && song.chart.length) {
+          chartHtml = renderChartLines(song.chart, semitones, preferFlats);
+        } else {
+          chartHtml = '<div class="meta-line">No chart to show yet.</div>';
+        }
+      }
+      return '<div class="setlist-song-block">' + titleHtml + metaHtml + '<div class="chart-box">' + chartHtml + "</div></div>";
+    }).join("");
+  }
+
+  $("btnBackFromSetlist").addEventListener("click", function () { setTab("tracker"); });
+
   $("transUp").addEventListener("click", function () { state.transpose++; renderSongView(); });
   $("transDown").addEventListener("click", function () { state.transpose--; renderSongView(); });
   $("fontUp").addEventListener("click", function () { state.fontSize = Math.min(28, state.fontSize + 2); renderSongView(); });
@@ -1179,6 +1287,7 @@
         '<div class="card-top"><div class="sunday-date">' + fmtDate(s.date) + "</div>" +
         '<div class="row">' +
         (s.leader ? '<span class="chip">Led by ' + esc(s.leader) + "</span>" : "") +
+        '<button class="icon-btn" data-viewsun="' + s.id + '">View charts</button>' +
         '<button class="icon-btn" data-editsun="' + s.id + '">Edit</button>' +
         '<button class="icon-btn" data-delsun="' + s.id + '">Delete</button>' +
         "</div></div>" +
@@ -1196,6 +1305,8 @@
     }).join("");
   }
   $("sundayList").addEventListener("click", function (e) {
+    var view = e.target.closest("[data-viewsun]");
+    if (view) { openSetlist(view.getAttribute("data-viewsun")); return; }
     var edit = e.target.closest("[data-editsun]");
     if (edit) { openLogSundayModal({ editId: edit.getAttribute("data-editsun") }); return; }
     var del = e.target.closest("[data-delsun]");
@@ -1292,8 +1403,12 @@
     var data = { date: date, leader: $("s_leader").value.trim(), notes: $("s_notes").value.trim(), songs: entries };
     $("mSave").disabled = true;
     var req = editing ? apiFetch("PATCH", "/api/sundays/" + editing.id, data) : apiFetch("POST", "/api/sundays", data);
-    req.then(function () { return loadAll(); }).then(closeModal)
-      .catch(function (e) { msg.textContent = e.message; $("mSave").disabled = false; });
+    req.then(function (saved) {
+      return loadAll().then(function () {
+        closeModal();
+        openSetlist(saved.id);
+      });
+    }).catch(function (e) { msg.textContent = e.message; $("mSave").disabled = false; });
   }
 
   /* ============================== TABS ============================== */
@@ -1303,7 +1418,8 @@
     $("view-song").hidden = tab !== "song";
     $("view-tracker").hidden = tab !== "tracker";
     $("view-tagger").hidden = tab !== "tagger";
-    $("tabs").hidden = tab === "song" || tab === "tagger";
+    $("view-setlist").hidden = tab !== "setlist";
+    $("tabs").hidden = tab === "song" || tab === "tagger" || tab === "setlist";
     document.querySelectorAll(".tab-btn").forEach(function (b) {
       b.classList.toggle("active", b.getAttribute("data-tab") === tab);
     });

@@ -4,8 +4,8 @@
   "private": true,
   "description": "Worship team chord chart library and Sunday setlist tracker.",
   "engines": {
-  "node": "24.x"
-},
+    "node": "24.x"
+  },
   "dependencies": {
     "pg": "^8.13.1",
     "@vercel/blob": "^2.8.2"
