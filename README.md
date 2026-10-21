@@ -36,8 +36,8 @@ api/sundays/[id].js   PATCH (update) / DELETE a Sunday log
 api/blob-upload.js    receives one rendered page image from the browser and stores it in Vercel Blob
 api/_db.js            shared Postgres connection helper
 api/_blob.js           shared Blob cleanup helper
-middleware.mjs         optional password gate for the whole app (see "Require a password" below)
-vercel.json            points Vercel at middleware.mjs
+middleware.js           optional password gate for the whole app (see "Require a password" below)
+vercel.json            points Vercel at middleware.js
 schema.sql            the two tables to create before first use
 ```
 
