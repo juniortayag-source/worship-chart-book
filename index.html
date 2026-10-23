@@ -271,7 +271,7 @@
 
   /* Export to PDF via the browser's print dialog */
   @media print {
-    button, .top, .tabs, #capBanner, #viewerBanner, .controls-bar, #parseNote, .tagger-hint, #taggerPageBar { display: none !important; }
+    button, .top, .tabs, #capBanner, .controls-bar, #parseNote, .tagger-hint, #taggerPageBar { display: none !important; }
     body { padding: 0; background: #fff; }
     .wrap { max-width: none; }
     .chart-scroll { overflow: visible !important; padding-bottom: 0; }
@@ -310,9 +310,6 @@
 
   <div id="capBanner" class="banner warn" hidden>
     Can't reach the server right now, so songs and setlists won't load or save. Check that <code>DATABASE_URL</code> is set (see README.md) and reload.
-  </div>
-  <div id="viewerBanner" class="banner" hidden>
-    You're viewing in read-only mode — you can look through everything, but changes won't save. Click Login to make changes.
   </div>
 
   <div class="tabs" id="tabs">
@@ -618,7 +615,6 @@
     }).then(function () {
       var isViewer = state.role === "viewer";
       document.body.classList.toggle("role-viewer", isViewer);
-      $("viewerBanner").hidden = !isViewer;
       $("btnLogin").hidden = !isViewer;
     });
   }
