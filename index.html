@@ -121,7 +121,22 @@
   .empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
   .empty-state h3 { color: var(--text); margin-bottom: 6px; }
 
+  .view-toggle { display: flex; gap: 2px; border: 1px solid var(--border); border-radius: 9px; padding: 2px; background: var(--surface); box-shadow: var(--shadow); }
+  .view-toggle button { border: none; background: none; color: var(--text-dim); border-radius: 7px; padding: 7px 11px; font-size: 0.82rem; font-weight: 600; }
+  .view-toggle button.active { background: var(--accent-dim); color: var(--accent); }
+
   .song-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 4px; }
+
+  .song-table-wrap { margin-top: 4px; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+  .song-table { width: 100%; min-width: 480px; border-collapse: collapse; background: var(--surface); }
+  .song-table th, .song-table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 0.88rem; vertical-align: middle; }
+  .song-table th { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); background: var(--surface-2); white-space: nowrap; }
+  .song-table tbody tr:last-child td { border-bottom: none; }
+  .song-table tbody tr:hover { background: var(--surface-2); }
+  .song-table td.title-cell { font-weight: 600; cursor: pointer; }
+  .song-table td.title-cell:hover { color: var(--accent); }
+  .song-table td.tags-cell .chip-row { margin-top: 0; }
+  .song-table th.actions-col, .song-table td.actions-cell { width: 1%; white-space: nowrap; text-align: right; }
   .song-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
     box-shadow: var(--shadow); text-align: left; display: flex; flex-direction: column; gap: 6px; position: relative;
@@ -134,7 +149,7 @@
   .chip { background: var(--surface-2); color: var(--text-dim); border-radius: 999px; padding: 2px 9px; font-size: 0.72rem; font-weight: 600; }
   .chip.key { background: var(--accent-dim); color: var(--accent); }
   .meta-line { color: var(--text-dim); font-size: 0.76rem; margin-top: 4px; }
-  .song-card .menu-wrap { position: relative; }
+  .menu-wrap { position: relative; }
   .menu { position: absolute; right: 0; top: 26px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); z-index: 5; min-width: 140px; overflow: hidden; }
   .menu button { display: block; width: 100%; text-align: left; background: none; border: none; padding: 9px 12px; font-size: 0.85rem; color: var(--text); }
   .menu button:hover { background: var(--surface-2); }
@@ -305,9 +320,27 @@
     <div class="row" style="margin-bottom:14px;">
       <input type="search" class="searchbar" id="librarySearch" placeholder="Search title, artist or tag…">
       <div class="spacer"></div>
+      <div class="view-toggle" role="group" aria-label="Library view">
+        <button type="button" id="btnViewGrid" aria-pressed="true">Grid</button>
+        <button type="button" id="btnViewList" aria-pressed="false">List</button>
+      </div>
       <button class="btn primary editor-only" id="btnAddSong">+ Add song</button>
     </div>
     <div id="songGrid" class="song-grid"></div>
+    <div id="songListWrap" class="song-table-wrap" hidden>
+      <table class="song-table">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Artist</th>
+            <th>Default Key</th>
+            <th>Tags</th>
+            <th class="actions-col editor-only"></th>
+          </tr>
+        </thead>
+        <tbody id="songListBody"></tbody>
+      </table>
+    </div>
     <div id="libraryEmpty" class="empty-state" hidden>
       <h3>No songs yet</h3>
       <div>Add your first chord chart to get started.</div>
@@ -496,7 +529,15 @@
   /* ============================== APP STATE ============================== */
   var songs = [];   // local cache of song docs {id,...}
   var sundays = []; // local cache of sunday docs {id,...}
-  var state = { tab: "library", songId: null, transpose: 0, fontSize: 16, autoscroll: false, scrollTimer: null };
+  function loadLibraryViewPref() {
+    try {
+      var v = localStorage.getItem("libraryView");
+      return v === "list" ? "list" : "grid";
+    } catch (e) {
+      return "grid";
+    }
+  }
+  var state = { tab: "library", songId: null, transpose: 0, fontSize: 16, autoscroll: false, scrollTimer: null, libraryView: loadLibraryViewPref() };
 
   var $ = function (id) { return document.getElementById(id); };
   function esc(s) {
@@ -824,16 +865,33 @@
     return { count: count, last: last };
   }
 
+  function setLibraryView(view) {
+    state.libraryView = view === "list" ? "list" : "grid";
+    try { localStorage.setItem("libraryView", state.libraryView); } catch (e) {}
+    updateLibraryViewUI();
+  }
+  function updateLibraryViewUI() {
+    var isList = state.libraryView === "list";
+    $("songGrid").hidden = isList;
+    $("songListWrap").hidden = !isList;
+    $("btnViewGrid").classList.toggle("active", !isList);
+    $("btnViewList").classList.toggle("active", isList);
+    $("btnViewGrid").setAttribute("aria-pressed", String(!isList));
+    $("btnViewList").setAttribute("aria-pressed", String(isList));
+  }
+  $("btnViewGrid").addEventListener("click", function () { setLibraryView("grid"); });
+  $("btnViewList").addEventListener("click", function () { setLibraryView("list"); });
+
   function renderLibrary() {
     var q = ($("librarySearch").value || "").toLowerCase().trim();
-    var grid = $("songGrid");
     var filtered = songs.filter(function (s) {
       if (!q) return true;
       var hay = [s.title, s.artist, (s.tags || []).join(" ")].join(" ").toLowerCase();
       return hay.indexOf(q) !== -1;
     });
     $("libraryEmpty").hidden = songs.length !== 0;
-    grid.innerHTML = filtered.map(function (s) {
+
+    $("songGrid").innerHTML = filtered.map(function (s) {
       var stats = songStats(s.id);
       var lastTxt = stats.last ? ("Last played " + fmtDate(stats.last)) : "Not yet played";
       return (
@@ -850,6 +908,22 @@
         "</div>" +
         '<div class="meta-line">' + lastTxt + (stats.count ? " &middot; played " + stats.count + "&times;" : "") + "</div>" +
         "</div>"
+      );
+    }).join("");
+
+    $("songListBody").innerHTML = filtered.map(function (s) {
+      return (
+        '<tr data-id="' + s.id + '">' +
+        '<td class="title-cell" data-open="' + s.id + '">' + esc(s.title || "Untitled") + "</td>" +
+        "<td>" + (s.artist ? esc(s.artist) : "") + "</td>" +
+        "<td>" + (s.defaultKey ? '<span class="chip key">' + esc(s.defaultKey) + "</span>" : "") + "</td>" +
+        '<td class="tags-cell"><div class="chip-row">' +
+        (s.tags || []).map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("") +
+        "</div></td>" +
+        '<td class="actions-cell editor-only"><div class="menu-wrap">' +
+        '<button class="icon-btn" data-menu="' + s.id + '">&#8942;</button>' +
+        "</div></td>" +
+        "</tr>"
       );
     }).join("");
   }
@@ -887,7 +961,14 @@
     var menuEl = e.target.closest("[data-menu]");
     if (menuEl) { e.stopPropagation(); toggleCardMenu(menuEl.getAttribute("data-menu"), menuEl); return; }
   });
+  $("songListBody").addEventListener("click", function (e) {
+    var openEl = e.target.closest("[data-open]");
+    if (openEl) { openSong(openEl.getAttribute("data-open")); return; }
+    var menuEl = e.target.closest("[data-menu]");
+    if (menuEl) { e.stopPropagation(); toggleCardMenu(menuEl.getAttribute("data-menu"), menuEl); return; }
+  });
   $("librarySearch").addEventListener("input", renderLibrary);
+  updateLibraryViewUI();
 
   /* ============================== SONG MODAL (add/edit) ============================== */
   function openSongModal(editId) {
