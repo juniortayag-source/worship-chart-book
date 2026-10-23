@@ -278,6 +278,12 @@
     .chart-page-wrap, .line-pair { page-break-inside: avoid; }
     .section-header { page-break-after: avoid; }
     .setlist-song-block + .setlist-song-block { page-break-before: always; }
+    /* Each song already force-starts its own page above, so the on-screen
+       spacer/divider between songs (margin + padding + dashed border) just
+       trails after a full-page chart image with nowhere left to go on that
+       page — spilling onto its own near-blank page before the next song's
+       forced break kicks in. It's not needed once songs are one-per-page. */
+    .setlist-song-block { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
     /* Each extra page-image starts fresh; the first starts wherever it
        naturally falls so a short header above it doesn't strand it alone
        on the next page with a near-empty page before it. */
