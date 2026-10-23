@@ -284,7 +284,7 @@
     <div class="brand"><span class="mark">&#9834;</span><h1>Worship Chart Book</h1></div>
     <div class="row" style="gap:10px;">
       <div class="subtitle" id="statusLine">Loading…</div>
-      <button class="btn ghost small" id="btnSwitchUser" title="Sign in with a different password">Switch user</button>
+      <button class="btn ghost small" id="btnLogin" title="Log in with a password">Login</button>
     </div>
   </div>
 
@@ -579,10 +579,10 @@
   // login prompt comes back. It works in most current browsers; if yours
   // doesn't re-prompt, closing this tab (or using a private/incognito
   // window) always gets a clean one.
-  function switchUser() {
+  function promptLogin() {
     try {
       var xhr = new XMLHttpRequest();
-      xhr.open("GET", "/api/whoami?switch=" + Date.now(), true, "switch-user", "x" + Date.now());
+      xhr.open("GET", "/api/whoami?login=" + Date.now(), true, "login", "x" + Date.now());
       xhr.onloadend = function () { location.reload(); };
       xhr.onerror = function () { location.reload(); };
       xhr.send();
@@ -590,9 +590,9 @@
       location.reload();
     }
   }
-  $("btnSwitchUser").addEventListener("click", function () {
-    showToast("Your browser should ask for a password again in a moment…");
-    setTimeout(switchUser, 300);
+  $("btnLogin").addEventListener("click", function () {
+    showToast("Your browser should ask you to log in again in a moment…");
+    setTimeout(promptLogin, 300);
   });
 
   /* ============================== PDF PROCESSING ============================== */
