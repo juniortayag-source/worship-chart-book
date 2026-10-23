@@ -314,7 +314,7 @@
 
   <div class="tabs" id="tabs">
     <button class="tab-btn active" data-tab="library">Library</button>
-    <button class="tab-btn" data-tab="tracker">Sunday Tracker</button>
+    <button class="tab-btn" data-tab="tracker">Sunday Sets</button>
   </div>
 
   <!-- LIBRARY VIEW -->
@@ -454,14 +454,19 @@
   <div id="view-tracker" hidden>
     <div class="stats-grid" id="statsGrid"></div>
     <div class="row" style="margin-bottom:14px;">
-      <h3 style="font-size:1.1rem;">Service history</h3>
       <div class="spacer"></div>
       <button class="btn primary editor-only" id="btnLogSunday">+ Log a Sunday</button>
     </div>
+
+    <h3 style="font-size:1.1rem;margin-bottom:10px;">Upcoming Services</h3>
+    <div id="upcomingSundayList"></div>
+    <div id="upcomingEmpty" class="meta-line" hidden>No upcoming services scheduled.</div>
+
+    <h3 style="font-size:1.1rem;margin:26px 0 10px;">Service History</h3>
     <div id="sundayList"></div>
     <div id="trackerEmpty" class="empty-state" hidden>
-      <h3>No Sundays logged yet</h3>
-      <div>Log your first setlist to start tracking what you've played.</div>
+      <h3>No past services yet</h3>
+      <div>Services will appear here once their date has passed.</div>
     </div>
   </div>
 </div>
@@ -1605,31 +1610,38 @@
       }).join("") : '<div class="meta-line">Log a Sunday to see trends here.</div>') +
       "</div></div>";
 
-    var list = $("sundayList");
-    $("trackerEmpty").hidden = sundays.length !== 0;
-    list.innerHTML = sundays.map(function (s) {
-      return '<div class="sunday-card" data-id="' + s.id + '">' +
-        '<div class="card-top"><div class="sunday-date">' + fmtDate(s.date) + "</div>" +
-        '<div class="row">' +
-        (s.leader ? '<span class="chip">Led by ' + esc(s.leader) + "</span>" : "") +
-        '<button class="icon-btn" data-viewsun="' + s.id + '">View charts</button>' +
-        '<button class="icon-btn editor-only" data-editsun="' + s.id + '">Edit</button>' +
-        '<button class="icon-btn editor-only" data-delsun="' + s.id + '">Delete</button>' +
-        "</div></div>" +
-        '<div class="sunday-songs">' +
-        (s.songs || []).map(function (e) {
-          return '<div class="sunday-song-row"><span class="title">' + esc(e.title) + "</span>" +
-            (e.key ? '<span class="detail">Key ' + esc(e.key) + "</span>" : "") +
-            (e.leader ? '<span class="detail">&middot; ' + esc(e.leader) + "</span>" : "") +
-            (e.notes ? '<span class="detail">&middot; ' + esc(e.notes) + "</span>" : "") +
-            "</div>";
-        }).join("") +
-        "</div>" +
-        (s.notes ? '<div class="sunday-notes">' + esc(s.notes) + "</div>" : "") +
-        "</div>";
-    }).join("");
+    var todayISO = new Date().toISOString().slice(0, 10);
+    var upcoming = sundays.filter(function (s) { return s.date && s.date > todayISO; }).slice().reverse();
+    var history = sundays.filter(function (s) { return !s.date || s.date <= todayISO; });
+
+    $("upcomingEmpty").hidden = upcoming.length !== 0;
+    $("upcomingSundayList").innerHTML = upcoming.map(sundayCardHtml).join("");
+
+    $("trackerEmpty").hidden = history.length !== 0;
+    $("sundayList").innerHTML = history.map(sundayCardHtml).join("");
   }
-  $("sundayList").addEventListener("click", function (e) {
+  function sundayCardHtml(s) {
+    return '<div class="sunday-card" data-id="' + s.id + '">' +
+      '<div class="card-top"><div class="sunday-date">' + fmtDate(s.date) + "</div>" +
+      '<div class="row">' +
+      (s.leader ? '<span class="chip">Led by ' + esc(s.leader) + "</span>" : "") +
+      '<button class="icon-btn" data-viewsun="' + s.id + '">View Set</button>' +
+      '<button class="icon-btn editor-only" data-editsun="' + s.id + '">Edit</button>' +
+      '<button class="icon-btn editor-only" data-delsun="' + s.id + '">Delete</button>' +
+      "</div></div>" +
+      '<div class="sunday-songs">' +
+      (s.songs || []).map(function (e) {
+        return '<div class="sunday-song-row"><span class="title">' + esc(e.title) + "</span>" +
+          (e.key ? '<span class="detail">Key ' + esc(e.key) + "</span>" : "") +
+          (e.leader ? '<span class="detail">&middot; ' + esc(e.leader) + "</span>" : "") +
+          (e.notes ? '<span class="detail">&middot; ' + esc(e.notes) + "</span>" : "") +
+          "</div>";
+      }).join("") +
+      "</div>" +
+      (s.notes ? '<div class="sunday-notes">' + esc(s.notes) + "</div>" : "") +
+      "</div>";
+  }
+  function sundayListClickHandler(e) {
     var view = e.target.closest("[data-viewsun]");
     if (view) { openSetlist(view.getAttribute("data-viewsun")); return; }
     var edit = e.target.closest("[data-editsun]");
@@ -1644,7 +1656,9 @@
           .catch(function (e2) { showToast(e2.message, true); });
       });
     }
-  });
+  }
+  $("sundayList").addEventListener("click", sundayListClickHandler);
+  $("upcomingSundayList").addEventListener("click", sundayListClickHandler);
   $("btnLogSunday").addEventListener("click", function () { openLogSundayModal({}); });
 
   /* ============================== LOG-A-SUNDAY MODAL ============================== */
