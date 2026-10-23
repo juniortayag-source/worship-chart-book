@@ -131,6 +131,10 @@
   .song-table { width: 100%; min-width: 480px; border-collapse: collapse; background: var(--surface); }
   .song-table th, .song-table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 0.88rem; vertical-align: middle; }
   .song-table th { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); background: var(--surface-2); white-space: nowrap; }
+  .song-table th.sortable { cursor: pointer; user-select: none; }
+  .song-table th.sortable:hover { color: var(--text); }
+  .song-table th .sort-arrow { display: inline-block; width: 0.9em; margin-left: 2px; color: var(--accent); }
+  .song-table th.sort-active { color: var(--accent); }
   .song-table tbody tr:last-child td { border-bottom: none; }
   .song-table tbody tr:hover { background: var(--surface-2); }
   .song-table td.title-cell { font-weight: 600; cursor: pointer; }
@@ -300,6 +304,7 @@
     <div class="row" style="gap:10px;">
       <div class="subtitle" id="statusLine">Loading…</div>
       <button class="btn ghost small" id="btnLogin" title="Log in to make changes">Login</button>
+      <button class="btn ghost small editor-only" id="btnLogout" title="Log out of edit mode">Log out</button>
     </div>
   </div>
 
@@ -331,10 +336,11 @@
       <table class="song-table">
         <thead>
           <tr>
-            <th>Title</th>
-            <th>Artist</th>
-            <th>Default Key</th>
-            <th>Tags</th>
+            <th class="sortable" data-sort="title">Title<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="artist">Artist<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="defaultKey">Default Key<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="ledBy">Led By<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="tags">Tags<span class="sort-arrow"></span></th>
             <th class="actions-col editor-only"></th>
           </tr>
         </thead>
@@ -537,7 +543,7 @@
       return "grid";
     }
   }
-  var state = { tab: "library", songId: null, transpose: 0, fontSize: 16, autoscroll: false, scrollTimer: null, libraryView: loadLibraryViewPref() };
+  var state = { tab: "library", songId: null, transpose: 0, fontSize: 16, autoscroll: false, scrollTimer: null, libraryView: loadLibraryViewPref(), librarySort: { col: "title", dir: "asc" } };
 
   var $ = function (id) { return document.getElementById(id); };
   function esc(s) {
@@ -636,6 +642,29 @@
     });
   }
   $("btnLogin").addEventListener("click", promptLogin);
+
+  // Basic Auth has no real "sign out" — the browser just keeps sending
+  // whatever password last worked, for the rest of the browsing session.
+  // The standard workaround: send one request with a deliberately wrong
+  // password, which makes the server issue a fresh 401 challenge and the
+  // browser drop the good credentials it had cached, without popping a
+  // prompt (since this attempt was supplied by script, not left blank).
+  // A plain reload (or re-checking role, as we do here) then shows a
+  // logged-out, view-only app again. Works in most current browsers; the
+  // one guaranteed fallback if yours doesn't drop it is closing this tab
+  // (or using a private/incognito window).
+  function promptLogout() {
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", "/api/login?logout=" + Date.now(), true, "logout", "x" + Date.now());
+      xhr.onloadend = function () { loadRole().then(function () { showToast("Logged out."); }); };
+      xhr.onerror = function () { loadRole(); };
+      xhr.send();
+    } catch (e) {
+      loadRole();
+    }
+  }
+  $("btnLogout").addEventListener("click", promptLogout);
 
   /* ============================== PDF PROCESSING ============================== */
   // The original PDF file never leaves the browser and is never uploaded or
@@ -882,11 +911,35 @@
   $("btnViewGrid").addEventListener("click", function () { setLibraryView("grid"); });
   $("btnViewList").addEventListener("click", function () { setLibraryView("list"); });
 
+  function updateSortHeaderUI() {
+    document.querySelectorAll("#songListWrap th.sortable").forEach(function (th) {
+      var col = th.getAttribute("data-sort");
+      var active = col === state.librarySort.col;
+      th.classList.toggle("sort-active", active);
+      var arrow = th.querySelector(".sort-arrow");
+      if (arrow) arrow.textContent = active ? (state.librarySort.dir === "asc" ? "▲" : "▼") : "";
+    });
+  }
+  document.querySelectorAll("#songListWrap th.sortable").forEach(function (th) {
+    th.addEventListener("click", function () {
+      var col = th.getAttribute("data-sort");
+      if (state.librarySort.col === col) {
+        state.librarySort.dir = state.librarySort.dir === "asc" ? "desc" : "asc";
+      } else {
+        state.librarySort.col = col;
+        state.librarySort.dir = "asc";
+      }
+      updateSortHeaderUI();
+      renderLibrary();
+    });
+  });
+  updateSortHeaderUI();
+
   function renderLibrary() {
     var q = ($("librarySearch").value || "").toLowerCase().trim();
     var filtered = songs.filter(function (s) {
       if (!q) return true;
-      var hay = [s.title, s.artist, (s.tags || []).join(" ")].join(" ").toLowerCase();
+      var hay = [s.title, s.artist, s.ledBy, (s.tags || []).join(" ")].join(" ").toLowerCase();
       return hay.indexOf(q) !== -1;
     });
     $("libraryEmpty").hidden = songs.length !== 0;
@@ -911,12 +964,19 @@
       );
     }).join("");
 
-    $("songListBody").innerHTML = filtered.map(function (s) {
+    var sortedForList = filtered.slice().sort(function (a, b) {
+      var av = librarySortValue(a, state.librarySort.col);
+      var bv = librarySortValue(b, state.librarySort.col);
+      var cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      return state.librarySort.dir === "desc" ? -cmp : cmp;
+    });
+    $("songListBody").innerHTML = sortedForList.map(function (s) {
       return (
         '<tr data-id="' + s.id + '">' +
         '<td class="title-cell" data-open="' + s.id + '">' + esc(s.title || "Untitled") + "</td>" +
         "<td>" + (s.artist ? esc(s.artist) : "") + "</td>" +
         "<td>" + (s.defaultKey ? '<span class="chip key">' + esc(s.defaultKey) + "</span>" : "") + "</td>" +
+        "<td>" + (s.ledBy ? esc(s.ledBy) : "") + "</td>" +
         '<td class="tags-cell"><div class="chip-row">' +
         (s.tags || []).map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("") +
         "</div></td>" +
@@ -926,6 +986,17 @@
         "</tr>"
       );
     }).join("");
+  }
+
+  function librarySortValue(s, col) {
+    switch (col) {
+      case "title": return (s.title || "").toLowerCase();
+      case "artist": return (s.artist || "").toLowerCase();
+      case "defaultKey": return (s.defaultKey || "").toLowerCase();
+      case "ledBy": return (s.ledBy || "").toLowerCase();
+      case "tags": return (s.tags || []).join(", ").toLowerCase();
+      default: return "";
+    }
   }
 
   function toggleCardMenu(songId, anchorEl) {
@@ -982,7 +1053,10 @@
       '<div class="field"><label>Artist</label><input type="text" id="f_artist" value="' + esc(editing ? editing.artist : "") + '" placeholder="All Sons &amp; Daughters"></div>' +
       '<div class="field"><label>Default key</label><input type="text" list="key-options" id="f_key" value="' + esc(editing ? editing.defaultKey : "") + '" placeholder="G"></div>' +
       "</div>" +
+      '<div class="field-row">' +
+      '<div class="field"><label>Led by</label><input type="text" id="f_ledby" value="' + esc(editing ? editing.ledBy : "") + '" placeholder="e.g. Sarah"></div>' +
       '<div class="field"><label>Tags (comma separated)</label><input type="text" id="f_tags" value="' + esc(editing && editing.tags ? editing.tags.join(", ") : "") + '" placeholder="fast, communion"></div>' +
+      "</div>" +
       '<div class="field"><label>' + (editing ? "Replace chord chart PDF (optional)" : "Chord chart PDF (optional)") + "</label>" +
       '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">Each page is rendered to an image right here in your browser and only that image is saved — the PDF file itself is never uploaded or stored. We\'ll try to find and tag the chords automatically; after saving, you can drag, edit, resize, or remove any of them, and add ones we missed (a scanned/photographed PDF has no text to find, so you\'ll tag it from scratch).</div>' +
       '<input type="file" id="f_pdf" accept="application/pdf,.pdf"></div>' +
@@ -1033,6 +1107,7 @@
     if (!title) { $("modalMsg").textContent = "Please enter a title."; return; }
     var artist = $("f_artist").value.trim();
     var key = $("f_key").value.trim();
+    var ledBy = $("f_ledby").value.trim();
     var tags = $("f_tags").value.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
     var fileInput = $("f_pdf");
     var file = fileInput.files && fileInput.files[0];
@@ -1051,7 +1126,7 @@
     if (!file && !manualEdited && !editing) { msg.textContent = "Please choose a PDF chord chart, or type the lyrics & chords in manually."; return; }
 
     saveBtn.disabled = true;
-    var base = { title: title, artist: artist, defaultKey: key, tags: tags };
+    var base = { title: title, artist: artist, defaultKey: key, ledBy: ledBy, tags: tags };
 
     function finish(extra, thenOpenTagger) {
       var data = Object.assign({}, base, extra || {});
