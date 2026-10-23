@@ -382,7 +382,7 @@
     <div class="song-header">
       <div>
         <h2 id="taggerTitle"></h2>
-        <div class="tagger-hint">Tap anywhere a chord appears on the image and type it. Tap an existing tag to edit or remove it.</div>
+        <div class="tagger-hint">Chords found on the page are already tagged — drag one to reposition it, tap it to edit, resize, or remove it, or tap empty space to add one that was missed.</div>
       </div>
     </div>
     <div class="controls-bar" id="taggerPageBar" hidden>
@@ -623,9 +623,55 @@
     });
   }
 
+  // Pre-fills chord tags by scanning the PDF's own text layer for tokens
+  // that look like chords (reusing the same isChordToken check transposition
+  // uses), and converting each one's PDF-space position into the xPct/yPct
+  // coordinates tags use on the rendered image. This only works when the
+  // PDF has real text in it — a scanned/photographed chart has no text
+  // layer, so it comes back empty and tagging just starts from scratch, as
+  // before. Either way, every tag — found automatically or not — can be
+  // dragged, resized, edited, or deleted in the tagger, and missed chords
+  // can still be added by tapping empty space.
+  function detectChordTags(page) {
+    return page.getTextContent().then(function (content) {
+      var unscaled = page.getViewport({ scale: 1 });
+      var pageWidth = unscaled.width, pageHeight = unscaled.height;
+      if (!pageWidth || !pageHeight) return [];
+      var tags = [];
+      content.items.forEach(function (item) {
+        var str = item.str;
+        if (!str || !str.trim()) return;
+        var x0 = item.transform[4], y0 = item.transform[5];
+        var fontSize = Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || 10;
+        var charW = str.length ? item.width / str.length : 0;
+        var idx = 0;
+        while (idx < str.length) {
+          while (idx < str.length && str[idx] === " ") idx++;
+          if (idx >= str.length) break;
+          var start = idx;
+          while (idx < str.length && str[idx] !== " ") idx++;
+          var word = str.slice(start, idx);
+          if (isChordToken(word)) {
+            var wordX = x0 + start * charW;
+            var adjY = y0 + fontSize * 0.32; // nudge up from the text baseline toward the glyph's visual center
+            tags.push({
+              id: uid(),
+              xPct: Math.min(99, Math.max(0, (wordX / pageWidth) * 100)),
+              yPct: Math.min(99, Math.max(0, ((pageHeight - adjY) / pageHeight) * 100)),
+              chord: word,
+              size: 1,
+            });
+          }
+        }
+      });
+      return tags;
+    }).catch(function () { return []; });
+  }
+
   // Renders every page of the PDF to an image and uploads each one, returning
-  // { pages: [{url,width,height,tags:[]}], pageCount }. Nothing from the PDF
-  // itself — text or binary — is kept past this function.
+  // { pages: [{url,width,height,tags}], pageCount }. Nothing from the PDF
+  // itself — text or binary — is kept past this function; only the rendered
+  // image and the chord tags detected from its text layer are saved.
   function processPdfToPages(file, progressCb) {
     return file.arrayBuffer().then(function (buf) {
       return pdfjsLib.getDocument({ data: buf }).promise.then(function (doc) {
@@ -639,10 +685,13 @@
                 return renderPdfPageToCanvas(page).then(function (canvas) {
                   var width = canvas.width, height = canvas.height;
                   return canvasToCompressedBlob(canvas).then(function (blob) {
-                    if (progressCb) progressCb("Uploading page " + pageNum + " of " + doc.numPages + "…");
-                    var filename = "chart-pages/" + uid() + "-p" + pageNum + ".jpg";
-                    return uploadPageImage(blob, filename).then(function (result) {
-                      pages.push({ url: result.url, width: width, height: height, tags: [] });
+                    if (progressCb) progressCb("Finding chords on page " + pageNum + "…");
+                    return Promise.all([detectChordTags(page), (function () {
+                      if (progressCb) progressCb("Uploading page " + pageNum + " of " + doc.numPages + "…");
+                      var filename = "chart-pages/" + uid() + "-p" + pageNum + ".jpg";
+                      return uploadPageImage(blob, filename);
+                    })()]).then(function (results) {
+                      pages.push({ url: results[1].url, width: width, height: height, tags: results[0] });
                     });
                   });
                 });
@@ -826,7 +875,7 @@
       "</div>" +
       '<div class="field"><label>Tags (comma separated)</label><input type="text" id="f_tags" value="' + esc(editing && editing.tags ? editing.tags.join(", ") : "") + '" placeholder="fast, communion"></div>' +
       '<div class="field"><label>' + (editing ? "Replace chord chart PDF (optional)" : "Chord chart PDF (optional)") + "</label>" +
-      '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">Each page is rendered to an image right here in your browser and only that image is saved — the PDF file itself is never uploaded or stored. After saving, you\'ll tap each chord once on the image so transposing can update it.</div>' +
+      '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">Each page is rendered to an image right here in your browser and only that image is saved — the PDF file itself is never uploaded or stored. We\'ll try to find and tag the chords automatically; after saving, you can drag, edit, resize, or remove any of them, and add ones we missed (a scanned/photographed PDF has no text to find, so you\'ll tag it from scratch).</div>' +
       '<input type="file" id="f_pdf" accept="application/pdf,.pdf"></div>' +
       '<div class="field">' +
       '<label>Or type lyrics &amp; chords by hand</label>' +

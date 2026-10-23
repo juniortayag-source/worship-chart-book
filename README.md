@@ -10,14 +10,19 @@ your data lives in a Postgres database you control.
   you add or edit a song with a PDF, each page is rendered to a plain image
   (a JPEG snapshot) right there in your browser, using pdf.js. Only that
   rendered image is saved; the PDF file itself never leaves your browser.
-  Right after saving, you tap once on each chord in the image and type what
-  it is — that's what lets "Transpose" work on an image-based chart, since
-  there's no extracted text to parse automatically. There's no "view
-  original PDF" feature, since the original file is never kept anywhere.
-  Drag a tagged chord to reposition it, and use the A&minus;/A+ buttons in
-  its popup to shrink or grow just that chord's label (handy on a dense
-  chart, or if the covering patch looks too big or too small once
-  transposed).
+  There's no "view original PDF" feature, since the original file is never
+  kept anywhere.
+- **Chords are pre-tagged automatically where possible.** While rendering
+  each page, the app also scans the PDF's own text layer (still entirely in
+  your browser, still discarded afterward) for anything shaped like a chord,
+  and places a tag at that spot — so most charts need little or no manual
+  tagging. A scanned or photographed PDF has no text layer to scan, so those
+  come up blank and you tag them from scratch, same as before. Either way,
+  right after saving you land on the tagger: drag a tag to reposition it,
+  tap it to edit its text or use the A&minus;/A+ buttons to resize it, tap
+  its &times; to remove it, or tap empty space to add one that was missed —
+  that's what lets "Transpose" work on an image-based chart, since there's
+  no extracted text to parse automatically at display time.
 - You can still skip PDFs entirely and type a chart by hand (**Edit song →
   "type lyrics & chords by hand"**) — that path is unchanged and doesn't need
   any chord tagging, since you're typing the chords directly.
