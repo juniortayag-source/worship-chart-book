@@ -128,6 +128,14 @@ would change something (add, edit, delete, tag chords, log a Sunday) is
 hidden for them — and blocked on the server even if someone tried to call
 the API directly. Redeploy after adding it, same as above.
 
+A "Switch user" button (top right) lets someone swap between the two
+passwords without closing their browser — browsers don't offer a real "log
+out" for this kind of login prompt, so it uses the standard workaround of
+making one request with a deliberately wrong password to clear what's
+cached, then reloads so the prompt comes back. It works in most current
+browsers; the one guaranteed fallback if a particular browser doesn't
+re-prompt is closing that tab (or using a private/incognito window).
+
 ### 5. Updating later
 
 Any time you want to change the app, edit the files and push to GitHub again
