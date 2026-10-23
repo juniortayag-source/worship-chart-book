@@ -1,4 +1,4 @@
-# Worship Chart Book
+# MFBC Worship Team
 
 A standalone, self-hosted version of the worship team chord chart library and
 Sunday setlist tracker. No dependency on any third-party platform's storage —

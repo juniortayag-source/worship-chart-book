@@ -22,7 +22,7 @@ module.exports = async (req, res) => {
   const auth = req.headers["authorization"];
   const password = passwordFromAuthHeader(auth);
   if (password !== editPassword) {
-    res.setHeader("WWW-Authenticate", 'Basic realm="Worship Chart Book", charset="UTF-8"');
+    res.setHeader("WWW-Authenticate", 'Basic realm="MFBC Worship Team", charset="UTF-8"');
     res.status(401).json({ error: "Authentication required." });
     return;
   }
