@@ -284,7 +284,7 @@
     <div class="brand"><span class="mark">&#9834;</span><h1>Worship Chart Book</h1></div>
     <div class="row" style="gap:10px;">
       <div class="subtitle" id="statusLine">Loading…</div>
-      <button class="btn ghost small" id="btnLogin" title="Log in with a password">Login</button>
+      <button class="btn ghost small" id="btnLogin" title="Log in to make changes">Login</button>
     </div>
   </div>
 
@@ -292,7 +292,7 @@
     Can't reach the server right now, so songs and setlists won't load or save. Check that <code>DATABASE_URL</code> is set (see README.md) and reload.
   </div>
   <div id="viewerBanner" class="banner" hidden>
-    You're signed in with view-only access — you can look through everything, but changes won't save.
+    You're viewing in read-only mode — you can look through everything, but changes won't save. Click Login to make changes.
   </div>
 
   <div class="tabs" id="tabs">
@@ -555,45 +555,46 @@
     $("statusLine").textContent = songs.length ? (songs.length + " song" + (songs.length === 1 ? "" : "s") + " in your library") : "";
   }
 
-  // Finds out whether this visitor logged in with the full-access password
-  // or the view-only one (see middleware.js / api/whoami.js), and hides
-  // anything that would change data if they're view-only. The API routes
-  // enforce the same restriction server-side, so this is just the UI half.
+  // The app itself and all of its data are public by default — viewing
+  // never requires a password (see api/whoami.js). This just asks the
+  // server whether THIS visitor's browser happens to already be sending the
+  // correct password (which it will, automatically, after a successful
+  // Login — see promptLogin below), so it knows whether to show editing
+  // controls. The API routes enforce the same restriction server-side
+  // regardless of what this reports, so it's just the UI half.
   function loadRole() {
     return apiFetch("GET", "/api/whoami").then(function (r) {
-      state.role = (r && r.role) || "editor";
+      state.role = (r && r.role) || "viewer";
     }).catch(function () {
-      state.role = "editor";
+      state.role = "viewer";
     }).then(function () {
       var isViewer = state.role === "viewer";
       document.body.classList.toggle("role-viewer", isViewer);
       $("viewerBanner").hidden = !isViewer;
+      $("btnLogin").hidden = !isViewer;
     });
   }
 
-  // HTTP Basic Auth has no real "sign out" — the browser just keeps
-  // whatever password it last succeeded with for this site, for the rest of
-  // the browsing session. This is the standard workaround: send a request
-  // with deliberately wrong credentials so the browser treats that as the
-  // latest attempt and drops what it had cached, then reload so the normal
-  // login prompt comes back. It works in most current browsers; if yours
-  // doesn't re-prompt, closing this tab (or using a private/incognito
-  // window) always gets a clean one.
+  // Clicking "Login" calls an endpoint (api/login.js) that always demands
+  // HTTP Basic Auth, which is what makes the browser pop its own native
+  // username/password dialog right here — no custom login form needed. Any
+  // username works; only the password matters. Once entered correctly, the
+  // browser remembers it for the rest of this browsing session and starts
+  // sending it automatically with every request from here on, so there's
+  // nothing else to wire up: the same credentials just work for saving
+  // changes too. If the dialog is canceled or the password is wrong, this
+  // quietly leaves things in view-only mode.
   function promptLogin() {
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open("GET", "/api/whoami?login=" + Date.now(), true, "login", "x" + Date.now());
-      xhr.onloadend = function () { location.reload(); };
-      xhr.onerror = function () { location.reload(); };
-      xhr.send();
-    } catch (e) {
-      location.reload();
-    }
+    fetch("/api/login", { cache: "no-store" }).then(function (res) {
+      if (res.ok) {
+        showToast("Logged in.");
+        return loadRole();
+      }
+    }).catch(function () {
+      showToast("Couldn't reach the server to log in. Try again in a moment.");
+    });
   }
-  $("btnLogin").addEventListener("click", function () {
-    showToast("Your browser should ask you to log in again in a moment…");
-    setTimeout(promptLogin, 300);
-  });
+  $("btnLogin").addEventListener("click", promptLogin);
 
   /* ============================== PDF PROCESSING ============================== */
   // The original PDF file never leaves the browser and is never uploaded or

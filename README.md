@@ -45,8 +45,9 @@ api/sundays/[id].js   PATCH (update) / DELETE a Sunday log
 api/blob-upload.js    receives one rendered page image from the browser and stores it in Vercel Blob
 api/_db.js            shared Postgres connection helper
 api/_blob.js           shared Blob cleanup helper
-middleware.js           optional password gate for the whole app (see "Require a password" below)
-vercel.json            points Vercel at middleware.js
+api/_auth.js           checks the optional edit password (see "Require a password" below)
+api/login.js           triggers the browser's login prompt for the edit password
+api/whoami.js           tells the front-end whether this visitor is currently logged in
 schema.sql            the two tables to create before first use
 ```
 
@@ -106,38 +107,29 @@ standalone copy of the app.
 If you ever see an error mentioning an unsupported Node.js version, go to
 **Project Settings → General → Node.js Version** and set it to 20.x or newer.
 
-### 4. Require a password (optional)
+### 4. Require a password to edit (optional)
 
-By default the app is public to anyone with the URL. To require a password
-before anyone can open it (or call any of its `/api` routes directly):
+Anyone with the URL can always open the app and look through every song,
+chart, and Sunday log — viewing is never password-protected. To require a
+password before anyone can add, edit, delete, tag chords, or log a Sunday:
 
 - Go to **Project Settings → Environment Variables** and add `APP_PASSWORD`
   set to whatever password you want your worship team to use.
 - Redeploy (same as above, since a new environment variable was added).
 
-From then on, visiting the site shows your browser's own built-in login
-prompt — any username works, only the password is checked. Most browsers
-remember it for the rest of that browsing session, so people won't be asked
-again every time. Leave `APP_PASSWORD` unset (or delete it and redeploy) to
-make the app public again.
+From then on, a fresh visitor sees a read-only app with a "Login" button
+(top right) and no edit buttons. Clicking Login shows your browser's own
+built-in password prompt — any username works, only the password is
+checked. Once entered correctly, the browser remembers it for the rest of
+that browsing session, so people won't be asked again every time they save
+something, and the edit buttons appear. Leave `APP_PASSWORD` unset (or
+delete it and redeploy) to make editing open to everyone too, with no Login
+button at all.
 
-**Optional: a view-only password.** Add a second environment variable,
-`APP_VIEW_PASSWORD`, set to a different password. Anyone who logs in with it
-can look through every song, chart, and Sunday log, but every button that
-would change something (add, edit, delete, tag chords, log a Sunday) is
-hidden for them — and blocked on the server even if someone tried to call
-the API directly. Redeploy after adding it, same as above.
-
-A "Login" button (top right) lets someone sign in again with a different
-password — handy since the app has no accounts of its own, so a fresh visit
-with no cached credentials typically lands in whichever mode the browser
-last used (often view-only, if that's the password most people have).
-Browsers don't offer a real "log out" for this kind of login prompt, so the
-button uses the standard workaround of making one request with a
-deliberately wrong password to clear what's cached, then reloads so the
-prompt comes back. It works in most current browsers; the one guaranteed
-fallback if a particular browser doesn't re-prompt is closing that tab (or
-using a private/incognito window).
+Browsers don't offer a real "log out" for this kind of login prompt, so
+once someone has logged in on a shared computer, the one guaranteed way to
+drop back to view-only on that browser is closing the tab (or using a
+private/incognito window) — there's no button for it.
 
 ### 5. Updating later
 
