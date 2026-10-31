@@ -277,7 +277,7 @@
   .annotation-layer { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 5; }
   .annotation-item { position: absolute; pointer-events: auto; }
   .annotation-note {
-    background: transparent; color: var(--text); border: 1px dashed var(--accent);
+    background: transparent; color: var(--chord); border: 1px dashed var(--chord);
     border-radius: 8px; padding: 8px 10px; font-size: 0.85rem; min-width: 90px; max-width: 260px;
     cursor: grab; white-space: pre-wrap; word-break: break-word;
     box-sizing: border-box; overflow: hidden;
@@ -1590,10 +1590,10 @@
   // every pixel position below the top would otherwise drift.
   function annoDefaultPosition(sun) {
     var rect = $("setlistCanvas").getBoundingClientRect();
-    var h = rect.height || 1;
+    var h = rect.height || 1, w = rect.width || 1;
     var n = (sun.annotations || []).length;
     var yPx = Math.max(20, (window.innerHeight / 2) - rect.top) + (n % 4) * 26;
-    return { xPct: 34 + (n % 5) * 7, yPct: (yPx / h) * 100, canvasHeight: h };
+    return { xPct: 34 + (n % 5) * 7, yPct: (yPx / h) * 100, canvasHeight: h, canvasWidth: w };
   }
   function addNoteAnnotation() {
     var sun = currentSetlistSunday(); if (!sun) return;
@@ -1603,11 +1603,17 @@
     renderAnnotations(sun);
     saveAnnotations(sun);
   }
+  // Shape width/height are stored as a percentage of the canvas WIDTH (the
+  // same reference the chart images themselves scale against, since each
+  // page image is rendered at 100% of its container's width with its aspect
+  // ratio preserved). That keeps a shape covering the same fraction of the
+  // chart on any screen size, instead of a fixed pixel box swallowing more
+  // or less of the chart depending on how large the chart itself renders.
   function addShapeAnnotation(type) {
     var sun = currentSetlistSunday(); if (!sun) return;
     var pos = annoDefaultPosition(sun);
     sun.annotations = sun.annotations || [];
-    sun.annotations.push({ id: uid(), type: type, xPct: pos.xPct, yPct: pos.yPct, wPx: 120, hPx: 80 });
+    sun.annotations.push({ id: uid(), type: type, xPct: pos.xPct, yPct: pos.yPct, wPct: (120 / pos.canvasWidth) * 100, hPct: (80 / pos.canvasWidth) * 100 });
     renderAnnotations(sun);
     saveAnnotations(sun);
   }
@@ -1649,19 +1655,22 @@
     var rect = $("setlistCanvas").getBoundingClientRect();
     var canvasWidth = rect.width, canvasHeight = rect.height || 1;
     // One-time migration for annotations saved by an earlier version of this
-    // feature that stored raw pixel y-positions: convert to a percentage of
-    // the canvas height using its current size, then persist that so it
-    // stops drifting on future reflows.
+    // feature that stored raw pixel y-positions and raw pixel sizes: convert
+    // to percentages using the canvas's current size, then persist that so
+    // they stop drifting/mis-sizing on future reflows or on other screens.
     var migrated = false;
     list.forEach(function (a) {
       if (a.yPct === undefined && a.yPx !== undefined) { a.yPct = (a.yPx / canvasHeight) * 100; migrated = true; }
       if (a.y1Pct === undefined && a.y1Px !== undefined) { a.y1Pct = (a.y1Px / canvasHeight) * 100; migrated = true; }
       if (a.y2Pct === undefined && a.y2Px !== undefined) { a.y2Pct = (a.y2Px / canvasHeight) * 100; migrated = true; }
+      if (a.wPct === undefined && a.wPx !== undefined) { a.wPct = (a.wPx / canvasWidth) * 100; migrated = true; }
+      if (a.hPct === undefined && a.hPx !== undefined) { a.hPct = (a.hPx / canvasWidth) * 100; migrated = true; }
     });
     layer.innerHTML = list.map(function (a) {
       if (a.type === "note") {
         var noteTop = (a.yPct / 100) * canvasHeight;
-        var noteSize = (a.wPx ? "width:" + a.wPx + "px;max-width:none;" : "") + (a.hPx ? "height:" + a.hPx + "px;" : "");
+        var noteSize = (a.wPct ? "width:" + ((a.wPct / 100) * canvasWidth) + "px;max-width:none;" : "") +
+          (a.hPct ? "height:" + ((a.hPct / 100) * canvasWidth) + "px;" : "");
         return '<div class="annotation-item annotation-note" data-annoid="' + a.id + '" style="left:' + a.xPct + '%;top:' + noteTop + 'px;' + noteSize + '">' +
           '<button class="anno-delete" data-del="' + a.id + '" title="Remove">&times;</button>' +
           '<span class="anno-note-text">' + esc(a.text || "Note") + "</span>" +
@@ -1669,8 +1678,9 @@
       }
       if (a.type === "rect" || a.type === "circle") {
         var shapeTop = (a.yPct / 100) * canvasHeight;
+        var shapeW = (a.wPct / 100) * canvasWidth, shapeH = (a.hPct / 100) * canvasWidth;
         return '<div class="annotation-item annotation-shape' + (a.type === "circle" ? " circle" : "") + '" data-annoid="' + a.id + '" ' +
-          'style="left:' + a.xPct + '%;top:' + shapeTop + 'px;width:' + a.wPx + 'px;height:' + a.hPx + 'px;">' +
+          'style="left:' + a.xPct + '%;top:' + shapeTop + 'px;width:' + shapeW + 'px;height:' + shapeH + 'px;">' +
           '<button class="anno-delete" data-del="' + a.id + '" title="Remove">&times;</button>' +
           '<div class="anno-resize-handle"></div></div>';
       }
@@ -1763,14 +1773,16 @@
         if (e.button !== undefined && e.button !== 0) return;
         e.stopPropagation();
         var startX = e.clientX, startY = e.clientY;
-        var startW = a.wPx || noteEl.offsetWidth, startH = a.hPx || noteEl.offsetHeight;
+        var rect = $("setlistCanvas").getBoundingClientRect();
+        var startWPct = a.wPct !== undefined ? a.wPct : (noteEl.offsetWidth / rect.width) * 100;
+        var startHPct = a.hPct !== undefined ? a.hPct : (noteEl.offsetHeight / rect.width) * 100;
         try { noteHandle.setPointerCapture(e.pointerId); } catch (err) {}
         function onMove(ev) {
-          a.wPx = Math.max(60, startW + (ev.clientX - startX));
-          a.hPx = Math.max(28, startH + (ev.clientY - startY));
-          noteEl.style.width = a.wPx + "px";
+          a.wPct = Math.max((60 / rect.width) * 100, startWPct + ((ev.clientX - startX) / rect.width) * 100);
+          a.hPct = Math.max((28 / rect.width) * 100, startHPct + ((ev.clientY - startY) / rect.width) * 100);
+          noteEl.style.width = ((a.wPct / 100) * rect.width) + "px";
           noteEl.style.maxWidth = "none";
-          noteEl.style.height = a.hPx + "px";
+          noteEl.style.height = ((a.hPct / 100) * rect.width) + "px";
         }
         function onUp() {
           noteHandle.removeEventListener("pointermove", onMove);
@@ -1799,13 +1811,15 @@
       handle.addEventListener("pointerdown", function (e) {
         if (e.button !== undefined && e.button !== 0) return;
         e.stopPropagation();
-        var startX = e.clientX, startY = e.clientY, startW = a.wPx, startH = a.hPx;
+        var startX = e.clientX, startY = e.clientY;
+        var rect = $("setlistCanvas").getBoundingClientRect();
+        var startWPct = a.wPct, startHPct = a.hPct;
         try { handle.setPointerCapture(e.pointerId); } catch (err) {}
         function onMove(ev) {
-          a.wPx = Math.max(24, startW + (ev.clientX - startX));
-          a.hPx = Math.max(24, startH + (ev.clientY - startY));
-          shapeEl.style.width = a.wPx + "px";
-          shapeEl.style.height = a.hPx + "px";
+          a.wPct = Math.max((24 / rect.width) * 100, startWPct + ((ev.clientX - startX) / rect.width) * 100);
+          a.hPct = Math.max((24 / rect.width) * 100, startHPct + ((ev.clientY - startY) / rect.width) * 100);
+          shapeEl.style.width = ((a.wPct / 100) * rect.width) + "px";
+          shapeEl.style.height = ((a.hPct / 100) * rect.width) + "px";
         }
         function onUp() {
           handle.removeEventListener("pointermove", onMove);
