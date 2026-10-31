@@ -280,6 +280,7 @@
     background: var(--accent-dim); color: var(--text); border: 1px solid var(--accent);
     border-radius: 8px; padding: 8px 10px; font-size: 0.85rem; min-width: 90px; max-width: 260px;
     box-shadow: var(--shadow); cursor: grab; white-space: pre-wrap; word-break: break-word;
+    box-sizing: border-box; overflow: auto;
   }
   .annotation-note:active { cursor: grabbing; }
   .annotation-shape { background: transparent; border: 3px solid var(--chord); cursor: grab; }
@@ -1582,16 +1583,23 @@
       showToast("Couldn't save that annotation: " + e.message, true);
     });
   }
+  // Both axes are stored as percentages of the canvas's own size (not raw
+  // pixels), so annotations stay put on the content they were placed over
+  // even when the canvas reflows to a different width/height — e.g. a phone
+  // rotated between portrait and landscape, where the whole set re-wraps and
+  // every pixel position below the top would otherwise drift.
   function annoDefaultPosition(sun) {
     var rect = $("setlistCanvas").getBoundingClientRect();
+    var h = rect.height || 1;
     var n = (sun.annotations || []).length;
-    return { xPct: 34 + (n % 5) * 7, yPx: Math.max(20, (window.innerHeight / 2) - rect.top) + (n % 4) * 26 };
+    var yPx = Math.max(20, (window.innerHeight / 2) - rect.top) + (n % 4) * 26;
+    return { xPct: 34 + (n % 5) * 7, yPct: (yPx / h) * 100, canvasHeight: h };
   }
   function addNoteAnnotation() {
     var sun = currentSetlistSunday(); if (!sun) return;
     var pos = annoDefaultPosition(sun);
     sun.annotations = sun.annotations || [];
-    sun.annotations.push({ id: uid(), type: "note", xPct: pos.xPct, yPx: pos.yPx, text: "Note" });
+    sun.annotations.push({ id: uid(), type: "note", xPct: pos.xPct, yPct: pos.yPct, text: "Note" });
     renderAnnotations(sun);
     saveAnnotations(sun);
   }
@@ -1599,7 +1607,7 @@
     var sun = currentSetlistSunday(); if (!sun) return;
     var pos = annoDefaultPosition(sun);
     sun.annotations = sun.annotations || [];
-    sun.annotations.push({ id: uid(), type: type, xPct: pos.xPct, yPx: pos.yPx, wPx: 120, hPx: 80 });
+    sun.annotations.push({ id: uid(), type: type, xPct: pos.xPct, yPct: pos.yPct, wPx: 120, hPx: 80 });
     renderAnnotations(sun);
     saveAnnotations(sun);
   }
@@ -1607,7 +1615,8 @@
     var sun = currentSetlistSunday(); if (!sun) return;
     var pos = annoDefaultPosition(sun);
     sun.annotations = sun.annotations || [];
-    sun.annotations.push({ id: uid(), type: "arrow", x1Pct: pos.xPct, y1Px: pos.yPx, x2Pct: Math.min(95, pos.xPct + 18), y2Px: pos.yPx + 60 });
+    var y2Pct = pos.yPct + (60 / pos.canvasHeight) * 100;
+    sun.annotations.push({ id: uid(), type: "arrow", x1Pct: pos.xPct, y1Pct: pos.yPct, x2Pct: Math.min(95, pos.xPct + 18), y2Pct: y2Pct });
     renderAnnotations(sun);
     saveAnnotations(sun);
   }
@@ -1615,9 +1624,9 @@
   // Recomputes an arrow's SVG box, line coordinates and handle positions in
   // place — called on every pointermove of a drag/resize, and once after a
   // full render — without touching any other element.
-  function layoutArrow(a, els, canvasWidth) {
+  function layoutArrow(a, els, canvasWidth, canvasHeight) {
     var x1 = (a.x1Pct / 100) * canvasWidth, x2 = (a.x2Pct / 100) * canvasWidth;
-    var y1 = a.y1Px, y2 = a.y2Px;
+    var y1 = (a.y1Pct / 100) * canvasHeight, y2 = (a.y2Pct / 100) * canvasHeight;
     var pad = 14;
     var minX = Math.min(x1, x2) - pad, minY = Math.min(y1, y2) - pad;
     var w = Math.abs(x2 - x1) + pad * 2, h = Math.abs(y2 - y1) + pad * 2;
@@ -1637,22 +1646,37 @@
   function renderAnnotations(sun) {
     var layer = $("annotationLayer");
     var list = sun.annotations || [];
-    var canvasWidth = $("setlistCanvas").getBoundingClientRect().width;
+    var rect = $("setlistCanvas").getBoundingClientRect();
+    var canvasWidth = rect.width, canvasHeight = rect.height || 1;
+    // One-time migration for annotations saved by an earlier version of this
+    // feature that stored raw pixel y-positions: convert to a percentage of
+    // the canvas height using its current size, then persist that so it
+    // stops drifting on future reflows.
+    var migrated = false;
+    list.forEach(function (a) {
+      if (a.yPct === undefined && a.yPx !== undefined) { a.yPct = (a.yPx / canvasHeight) * 100; migrated = true; }
+      if (a.y1Pct === undefined && a.y1Px !== undefined) { a.y1Pct = (a.y1Px / canvasHeight) * 100; migrated = true; }
+      if (a.y2Pct === undefined && a.y2Px !== undefined) { a.y2Pct = (a.y2Px / canvasHeight) * 100; migrated = true; }
+    });
     layer.innerHTML = list.map(function (a) {
       if (a.type === "note") {
-        return '<div class="annotation-item annotation-note" data-annoid="' + a.id + '" style="left:' + a.xPct + '%;top:' + a.yPx + 'px;">' +
+        var noteTop = (a.yPct / 100) * canvasHeight;
+        var noteSize = (a.wPx ? "width:" + a.wPx + "px;max-width:none;" : "") + (a.hPx ? "height:" + a.hPx + "px;" : "");
+        return '<div class="annotation-item annotation-note" data-annoid="' + a.id + '" style="left:' + a.xPct + '%;top:' + noteTop + 'px;' + noteSize + '">' +
           '<button class="anno-delete" data-del="' + a.id + '" title="Remove">&times;</button>' +
-          '<span class="anno-note-text">' + esc(a.text || "Note") + "</span></div>";
+          '<span class="anno-note-text">' + esc(a.text || "Note") + "</span>" +
+          '<div class="anno-resize-handle"></div></div>';
       }
       if (a.type === "rect" || a.type === "circle") {
+        var shapeTop = (a.yPct / 100) * canvasHeight;
         return '<div class="annotation-item annotation-shape' + (a.type === "circle" ? " circle" : "") + '" data-annoid="' + a.id + '" ' +
-          'style="left:' + a.xPct + '%;top:' + a.yPx + 'px;width:' + a.wPx + 'px;height:' + a.hPx + 'px;">' +
+          'style="left:' + a.xPct + '%;top:' + shapeTop + 'px;width:' + a.wPx + 'px;height:' + a.hPx + 'px;">' +
           '<button class="anno-delete" data-del="' + a.id + '" title="Remove">&times;</button>' +
           '<div class="anno-resize-handle"></div></div>';
       }
       if (a.type === "arrow") {
         var x1 = (a.x1Pct / 100) * canvasWidth, x2 = (a.x2Pct / 100) * canvasWidth;
-        var y1 = a.y1Px, y2 = a.y2Px;
+        var y1 = (a.y1Pct / 100) * canvasHeight, y2 = (a.y2Pct / 100) * canvasHeight;
         var pad = 14;
         var minX = Math.min(x1, x2) - pad, minY = Math.min(y1, y2) - pad;
         var w = Math.abs(x2 - x1) + pad * 2, h = Math.abs(y2 - y1) + pad * 2;
@@ -1669,6 +1693,7 @@
       return "";
     }).join("");
     wireAnnotationInteractions(sun);
+    if (migrated) saveAnnotations(sun);
   }
 
   function wireAnnotationInteractions(sun) {
@@ -1703,14 +1728,14 @@
       var id = noteEl.getAttribute("data-annoid");
       var a = (sun.annotations || []).find(function (x) { return x.id === id; });
       if (!a) return;
-      var startXPct, startYPx;
+      var startXPct, startYPct;
       startDrag(noteEl, function (dx, dy, rect) {
         a.xPct = Math.min(98, Math.max(0, startXPct + (dx / rect.width) * 100));
-        a.yPx = Math.max(0, startYPx + dy);
+        a.yPct = Math.max(0, startYPct + (dy / rect.height) * 100);
         noteEl.style.left = a.xPct + "%";
-        noteEl.style.top = a.yPx + "px";
+        noteEl.style.top = (a.yPct / 100) * rect.height + "px";
       }, function () { saveAnnotations(sun); });
-      noteEl.addEventListener("pointerdown", function () { startXPct = a.xPct; startYPx = a.yPx; });
+      noteEl.addEventListener("pointerdown", function () { startXPct = a.xPct; startYPct = a.yPct; });
       noteEl.addEventListener("click", function (e) {
         if (e.target.closest(".anno-delete") || noteEl.classList.contains("editing")) return;
         var textEl = noteEl.querySelector(".anno-note-text");
@@ -1732,20 +1757,43 @@
           if (ke.key === "Escape") { textEl.textContent = a.text; textEl.blur(); }
         });
       });
+
+      var noteHandle = noteEl.querySelector(".anno-resize-handle");
+      noteHandle.addEventListener("pointerdown", function (e) {
+        if (e.button !== undefined && e.button !== 0) return;
+        e.stopPropagation();
+        var startX = e.clientX, startY = e.clientY;
+        var startW = a.wPx || noteEl.offsetWidth, startH = a.hPx || noteEl.offsetHeight;
+        try { noteHandle.setPointerCapture(e.pointerId); } catch (err) {}
+        function onMove(ev) {
+          a.wPx = Math.max(60, startW + (ev.clientX - startX));
+          a.hPx = Math.max(28, startH + (ev.clientY - startY));
+          noteEl.style.width = a.wPx + "px";
+          noteEl.style.maxWidth = "none";
+          noteEl.style.height = a.hPx + "px";
+        }
+        function onUp() {
+          noteHandle.removeEventListener("pointermove", onMove);
+          noteHandle.removeEventListener("pointerup", onUp);
+          saveAnnotations(sun);
+        }
+        noteHandle.addEventListener("pointermove", onMove);
+        noteHandle.addEventListener("pointerup", onUp);
+      });
     });
 
     Array.prototype.forEach.call(layer.querySelectorAll(".annotation-shape"), function (shapeEl) {
       var id = shapeEl.getAttribute("data-annoid");
       var a = (sun.annotations || []).find(function (x) { return x.id === id; });
       if (!a) return;
-      var startXPct, startYPx;
+      var startXPct, startYPct;
       startDrag(shapeEl, function (dx, dy, rect) {
         a.xPct = Math.min(98, Math.max(0, startXPct + (dx / rect.width) * 100));
-        a.yPx = Math.max(0, startYPx + dy);
+        a.yPct = Math.max(0, startYPct + (dy / rect.height) * 100);
         shapeEl.style.left = a.xPct + "%";
-        shapeEl.style.top = a.yPx + "px";
+        shapeEl.style.top = (a.yPct / 100) * rect.height + "px";
       }, function () { saveAnnotations(sun); });
-      shapeEl.addEventListener("pointerdown", function () { startXPct = a.xPct; startYPx = a.yPx; });
+      shapeEl.addEventListener("pointerdown", function () { startXPct = a.xPct; startYPct = a.yPct; });
 
       var handle = shapeEl.querySelector(".anno-resize-handle");
       handle.addEventListener("pointerdown", function (e) {
@@ -1783,13 +1831,13 @@
       };
       var startX1, startY1, startX2, startY2;
       startDrag(els.hitLine, function (dx, dy, rect) {
-        var dxPct = (dx / rect.width) * 100;
+        var dxPct = (dx / rect.width) * 100, dyPct = (dy / rect.height) * 100;
         a.x1Pct = startX1 + dxPct; a.x2Pct = startX2 + dxPct;
-        a.y1Px = startY1 + dy; a.y2Px = startY2 + dy;
-        layoutArrow(a, els, rect.width);
+        a.y1Pct = startY1 + dyPct; a.y2Pct = startY2 + dyPct;
+        layoutArrow(a, els, rect.width, rect.height);
       }, function () { saveAnnotations(sun); });
       els.hitLine.addEventListener("pointerdown", function () {
-        startX1 = a.x1Pct; startY1 = a.y1Px; startX2 = a.x2Pct; startY2 = a.y2Px;
+        startX1 = a.x1Pct; startY1 = a.y1Pct; startX2 = a.x2Pct; startY2 = a.y2Pct;
       });
 
       [[els.handle1, "1"], [els.handle2, "2"]].forEach(function (pair) {
@@ -1803,9 +1851,9 @@
           function onMove(ev) {
             var x = Math.min(rect.width, Math.max(0, ev.clientX - rect.left));
             var y = Math.max(0, ev.clientY - rect.top);
-            if (which === "1") { a.x1Pct = (x / rect.width) * 100; a.y1Px = y; }
-            else { a.x2Pct = (x / rect.width) * 100; a.y2Px = y; }
-            layoutArrow(a, els, rect.width);
+            if (which === "1") { a.x1Pct = (x / rect.width) * 100; a.y1Pct = (y / rect.height) * 100; }
+            else { a.x2Pct = (x / rect.width) * 100; a.y2Pct = (y / rect.height) * 100; }
+            layoutArrow(a, els, rect.width, rect.height);
           }
           function onUp() {
             handle.removeEventListener("pointermove", onMove);
