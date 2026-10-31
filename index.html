@@ -288,8 +288,9 @@
   .anno-delete {
     position: absolute; top: -9px; right: -9px; width: 18px; height: 18px; border-radius: 50%;
     background: var(--danger); color: #fff; border: none; font-size: 0.7rem; line-height: 18px;
-    text-align: center; padding: 0; cursor: pointer;
+    text-align: center; padding: 0; cursor: pointer; pointer-events: auto;
   }
+  .anno-delete.standalone { top: auto; right: auto; transform: translate(-50%, -50%); }
   .anno-resize-handle {
     position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; border-radius: 50%;
     background: var(--chord); border: 2px solid var(--surface); cursor: nwse-resize;
@@ -503,7 +504,7 @@
         <button class="btn small" id="btnExportSetlistPdf">Export PDF</button>
       </div>
     </div>
-    <div class="controls-bar editor-only" id="annotateBar">
+    <div class="controls-bar sticky-bar editor-only" id="annotateBar">
       <div class="control-group">
         <span class="label-txt">Annotate</span>
         <button class="btn small" id="annoAddNote">+ Note</button>
