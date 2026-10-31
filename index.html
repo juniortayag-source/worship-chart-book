@@ -482,15 +482,15 @@
           <div class="yt-scrub-track"></div>
           <div class="yt-scrub-loop" id="ytScrubLoop"></div>
           <div class="yt-scrub-fill" id="ytScrubFill"></div>
-          <div class="yt-loop-handle start editor-only" id="ytLoopStartHandle" title="Drag to set where the loop starts"></div>
-          <div class="yt-loop-handle end editor-only" id="ytLoopEndHandle" title="Drag to set where the loop ends"></div>
+          <div class="yt-loop-handle start" id="ytLoopStartHandle" title="Drag to set where the loop starts"></div>
+          <div class="yt-loop-handle end" id="ytLoopEndHandle" title="Drag to set where the loop ends"></div>
           <div class="yt-scrub-handle" id="ytScrubHandle"></div>
         </div>
         <span class="yt-time" id="ytTimeDur">0:00</span>
       </div>
       <div class="control-group">
         <button class="btn small" id="ytLoopToggle" title="Loop playback between the two markers on the bar">Loop: Off</button>
-        <button class="icon-btn editor-only" id="ytLoopClear" title="Clear the loop markers">&times;</button>
+        <button class="icon-btn" id="ytLoopClear" title="Clear the loop markers">&times;</button>
       </div>
     </div>
 
@@ -2375,6 +2375,11 @@
     if (!s) return;
     s.loopStart = state.yt.loopStart;
     s.loopEnd = state.yt.loopEnd;
+    // Anyone can set a practice loop, but only an editor's version of it is
+    // shared with everyone else: a viewer's markers work for their own
+    // session (and survive switching songs and back) but aren't written to
+    // the shared song record, since the API only accepts edits from editors.
+    if (state.role !== "editor") return;
     apiFetch("PATCH", "/api/songs/" + s.id, { loopStart: s.loopStart, loopEnd: s.loopEnd }).catch(function (e) {
       showToast("Couldn't save the loop markers: " + e.message, true);
     });
