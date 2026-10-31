@@ -179,6 +179,7 @@
   .song-entry-row .field-row { margin-bottom: 8px; }
 
   .toast-stack { position: fixed; left: 0; right: 0; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 90; pointer-events: none; }
+  .yt-audio-host { position: fixed; width: 1px; height: 1px; bottom: 0; right: 0; opacity: 0.01; overflow: hidden; pointer-events: none; }
   .toast { background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; box-shadow: var(--shadow); max-width: 90vw; text-align: center; }
   .toast.error { background: var(--danger); color: #fff; }
 
@@ -456,6 +457,9 @@
         <span class="label-txt">Pad vol</span>
         <input type="range" min="0" max="100" value="35" id="padVolume" style="width:80px;">
       </div>
+      <div class="control-group" id="ytGroup" hidden>
+        <button class="btn small" id="ytToggle" title="Play this song's reference track from YouTube in the background">&#9654; Reference track</button>
+      </div>
     </div>
 
     <div class="controls-bar sticky-bar">
@@ -558,6 +562,10 @@
 <!-- Modal root -->
 <div id="modalRoot"></div>
 <div id="toastStack" class="toast-stack"></div>
+<!-- Hidden host for the YouTube reference-track player (audio only — kept
+     off-screen rather than display:none, since some browsers suspend
+     display:none video and would stop the audio with it). -->
+<div class="yt-audio-host"><div id="ytPlayerHost"></div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
@@ -1146,6 +1154,7 @@
       '<div class="field"><label>Led by</label><input type="text" id="f_ledby" value="' + esc(editing ? editing.ledBy : "") + '" placeholder="e.g. Sarah"></div>' +
       '<div class="field"><label>Tags (comma separated)</label><input type="text" id="f_tags" value="' + esc(editing && editing.tags ? editing.tags.join(", ") : "") + '" placeholder="fast, communion"></div>' +
       "</div>" +
+      '<div class="field"><label>YouTube reference track (optional)</label><input type="url" id="f_youtube" value="' + esc(editing ? editing.youtubeUrl : "") + '" placeholder="https://www.youtube.com/watch?v=..."></div>' +
       '<div class="field"><label>' + (editing ? "Replace chord chart PDF (optional)" : "Chord chart PDF (optional)") + "</label>" +
       '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">Each page is rendered to an image right here in your browser and only that image is saved — the PDF file itself is never uploaded or stored. We\'ll try to find and tag the chords automatically; after saving, you can drag, edit, resize, or remove any of them, and add ones we missed (a scanned/photographed PDF has no text to find, so you\'ll tag it from scratch).</div>' +
       '<input type="file" id="f_pdf" accept="application/pdf,.pdf"></div>' +
@@ -1198,6 +1207,7 @@
     var key = $("f_key").value.trim();
     var ledBy = $("f_ledby").value.trim();
     var tags = $("f_tags").value.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+    var youtubeUrl = $("f_youtube").value.trim();
     var fileInput = $("f_pdf");
     var file = fileInput.files && fileInput.files[0];
     var msg = $("modalMsg");
@@ -1215,7 +1225,7 @@
     if (!file && !manualEdited && !editing) { msg.textContent = "Please choose a PDF chord chart, or type the lyrics & chords in manually."; return; }
 
     saveBtn.disabled = true;
-    var base = { title: title, artist: artist, defaultKey: key, ledBy: ledBy, tags: tags };
+    var base = { title: title, artist: artist, defaultKey: key, ledBy: ledBy, tags: tags, youtubeUrl: youtubeUrl };
 
     function finish(extra, thenOpenTagger) {
       var data = Object.assign({}, base, extra || {});
@@ -1251,12 +1261,12 @@
   /* ============================== RENDER: SONG VIEW ============================== */
   function openSong(songId) {
     var s = songs.find(function (x) { return x.id === songId; });
-    state.songId = songId; state.transpose = 0; stopAutoscroll(); stopMetronome(); stopPad(true);
+    state.songId = songId; state.transpose = 0; stopAutoscroll(); stopMetronome(); stopPad(true); stopYoutubeTrack();
     state.metroBpm = Math.max(40, Math.min(240, (s && s.bpm) || 90));
     setTab("song");
     renderSongView();
   }
-  $("btnBackToLibrary").addEventListener("click", function () { stopAutoscroll(); stopMetronome(); stopPad(true); setTab("library"); });
+  $("btnBackToLibrary").addEventListener("click", function () { stopAutoscroll(); stopMetronome(); stopPad(true); stopYoutubeTrack(); setTab("library"); });
   $("btnEditSong").addEventListener("click", function () { if (state.songId) openSongModal(state.songId); });
 
   function renderChartLines(pagesArr, semitones, preferFlats) {
@@ -1308,6 +1318,7 @@
     $("songKeyChip").style.display = shownKey || state.transpose ? "" : "none";
     state.currentKey = shownKey || null;
     if (state.padPlaying && state.padKey !== state.currentKey) retunePad(state.currentKey);
+    $("ytGroup").hidden = !youtubeVideoId(s.youtubeUrl);
     $("transVal").textContent = (state.transpose > 0 ? "+" : "") + state.transpose;
     $("fontVal").textContent = state.fontSize;
     document.documentElement.style.setProperty("--chart-font-size", state.fontSize + "px");
@@ -2207,6 +2218,71 @@
     }
   });
 
+  /* ============================== YOUTUBE REFERENCE TRACK ============================== */
+  // A song can carry a YouTube link (set in "Edit song"); this plays it in
+  // the background while practicing. The IFrame API's player lives in a 1x1
+  // off-screen host (see .yt-audio-host), so this is audio-only to the
+  // user — just a play/pause toggle, no video to look at.
+  state.yt = { player: null, apiLoading: false, videoId: null, playing: false, readyCallbacks: [] };
+
+  function youtubeVideoId(url) {
+    if (!url) return null;
+    var m = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|[?&]v=)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
+  function ensureYoutubeApi(onReady) {
+    if (window.YT && window.YT.Player) { onReady(); return; }
+    state.yt.readyCallbacks.push(onReady);
+    if (state.yt.apiLoading) return;
+    state.yt.apiLoading = true;
+    var prevCallback = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = function () {
+      if (typeof prevCallback === "function") prevCallback();
+      state.yt.readyCallbacks.forEach(function (fn) { fn(); });
+      state.yt.readyCallbacks = [];
+    };
+    var tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+  }
+  function setYtButtonLabel(isPlaying) {
+    var btn = $("ytToggle");
+    if (btn) btn.innerHTML = isPlaying ? "&#10074;&#10074; Reference track" : "&#9654; Reference track";
+  }
+  function playYoutubeTrack(videoId) {
+    ensureYoutubeApi(function () {
+      if (state.yt.player && state.yt.videoId === videoId) { state.yt.player.playVideo(); return; }
+      state.yt.videoId = videoId;
+      if (state.yt.player) { state.yt.player.loadVideoById(videoId); return; }
+      state.yt.player = new YT.Player("ytPlayerHost", {
+        videoId: videoId,
+        playerVars: { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1 },
+        events: {
+          onReady: function (e) { e.target.playVideo(); },
+          onStateChange: function (e) {
+            var playing = e.data === YT.PlayerState.PLAYING;
+            state.yt.playing = playing;
+            setYtButtonLabel(playing);
+          }
+        }
+      });
+    });
+  }
+  function stopYoutubeTrack() {
+    state.yt.playing = false;
+    setYtButtonLabel(false);
+    if (state.yt.player && state.yt.player.pauseVideo) {
+      try { state.yt.player.pauseVideo(); } catch (e) {}
+    }
+  }
+  $("ytToggle").addEventListener("click", function () {
+    var s = songs.find(function (x) { return x.id === state.songId; });
+    var videoId = s ? youtubeVideoId(s.youtubeUrl) : null;
+    if (!videoId) { showToast("No YouTube link set for this song.", true); return; }
+    if (state.yt.playing && state.yt.videoId === videoId) { stopYoutubeTrack(); return; }
+    playYoutubeTrack(videoId);
+  });
+
   /* ============================== ADD TO SUNDAY (from song view) ============================== */
   $("btnAddToSunday").addEventListener("click", function () {
     openLogSundayModal({ preselectSongId: state.songId });
@@ -2388,7 +2464,7 @@
     document.querySelectorAll(".tab-btn").forEach(function (b) {
       b.classList.toggle("active", b.getAttribute("data-tab") === tab);
     });
-    if (tab !== "song") { stopAutoscroll(); stopMetronome(); stopPad(true); }
+    if (tab !== "song") { stopAutoscroll(); stopMetronome(); stopPad(true); stopYoutubeTrack(); }
   }
   document.querySelectorAll(".tab-btn").forEach(function (b) {
     b.addEventListener("click", function () { setTab(b.getAttribute("data-tab")); });
