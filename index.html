@@ -399,6 +399,13 @@
       <div class="control-group">
         <button class="icon-btn" id="metroSound" title="Toggle click sound">&#128264;</button>
       </div>
+      <div class="control-group">
+        <button class="btn small" id="padToggle" title="Play an ambient pad in this song's key">&#9654; Pad</button>
+      </div>
+      <div class="control-group">
+        <span class="label-txt">Pad vol</span>
+        <input type="range" min="0" max="100" value="35" id="padVolume" style="width:80px;">
+      </div>
     </div>
 
     <div class="controls-bar sticky-bar">
@@ -1182,12 +1189,12 @@
   /* ============================== RENDER: SONG VIEW ============================== */
   function openSong(songId) {
     var s = songs.find(function (x) { return x.id === songId; });
-    state.songId = songId; state.transpose = 0; stopAutoscroll(); stopMetronome();
+    state.songId = songId; state.transpose = 0; stopAutoscroll(); stopMetronome(); stopPad(true);
     state.metroBpm = Math.max(40, Math.min(240, (s && s.bpm) || 90));
     setTab("song");
     renderSongView();
   }
-  $("btnBackToLibrary").addEventListener("click", function () { stopAutoscroll(); stopMetronome(); setTab("library"); });
+  $("btnBackToLibrary").addEventListener("click", function () { stopAutoscroll(); stopMetronome(); stopPad(true); setTab("library"); });
   $("btnEditSong").addEventListener("click", function () { if (state.songId) openSongModal(state.songId); });
 
   function renderChartLines(pagesArr, semitones, preferFlats) {
@@ -1237,6 +1244,8 @@
     var shownKey = s.defaultKey ? transposeChord(s.defaultKey, state.transpose, preferFlats) : "";
     $("songKeyChip").textContent = shownKey ? ("Key: " + shownKey) : (state.transpose ? ("Transposed " + (state.transpose > 0 ? "+" : "") + state.transpose) : "");
     $("songKeyChip").style.display = shownKey || state.transpose ? "" : "none";
+    state.currentKey = shownKey || null;
+    if (state.padPlaying && state.padKey !== state.currentKey) retunePad(state.currentKey);
     $("transVal").textContent = (state.transpose > 0 ? "+" : "") + state.transpose;
     $("fontVal").textContent = state.fontSize;
     document.documentElement.style.setProperty("--chart-font-size", state.fontSize + "px");
@@ -1535,13 +1544,21 @@
     }, 40);
   });
 
+  /* ============================== SHARED AUDIO ============================== */
+  // One AudioContext shared by the metronome click and the ambient pad below,
+  // created lazily on first use (browsers won't let audio start before some
+  // user interaction anyway).
+  function getAudioCtx() {
+    if (!state.audioCtx) state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return state.audioCtx;
+  }
+
   /* ============================== METRONOME ============================== */
-  state.metroBpm = 90; state.metroRunning = false; state.metroTimer = null; state.metroSound = false; state.metroAudioCtx = null; state.metroSaveTimer = null;
+  state.metroBpm = 90; state.metroRunning = false; state.metroTimer = null; state.metroSound = false; state.metroSaveTimer = null;
 
   function playClick() {
     try {
-      if (!state.metroAudioCtx) state.metroAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      var ctx = state.metroAudioCtx;
+      var ctx = getAudioCtx();
       var t = ctx.currentTime;
       var osc = ctx.createOscillator();
       var gain = ctx.createGain();
@@ -1594,6 +1611,122 @@
     state.metroSound = !state.metroSound;
     $("metroSound").classList.toggle("muted", !state.metroSound);
     $("metroSound").innerHTML = state.metroSound ? "&#128266;" : "&#128264;";
+  });
+
+  /* ============================== AMBIENT PAD ============================== */
+  // A soft root+fifth drone in the song's current (possibly transposed) key,
+  // synthesized entirely in the browser — no audio files. Two slightly
+  // detuned sawtooth oscillators per note give it a warm "unison" pad
+  // texture, a lowpass filter rounds off the edge, and a very slow LFO on
+  // the filter's cutoff gives it a little gentle movement instead of
+  // sounding static. Fades in/out over a second or so instead of clicking
+  // on/off, and glides to a new key instead of restarting when you
+  // transpose while it's already playing.
+  state.padPlaying = false; state.padNodes = null; state.padKey = null;
+
+  function padMidiFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+  function padFreqsForKey(key) {
+    var rootIdx = keyRootIndex(key);
+    if (rootIdx == null) return null;
+    var rootMidi = 48 + rootIdx; // root in a low-ish octave (around C3) for a warm drone
+    return { root: padMidiFreq(rootMidi), fifth: padMidiFreq(rootMidi + 7) };
+  }
+  function padVolumeValue() {
+    return (parseInt($("padVolume").value, 10) || 0) / 100 * 0.3; // slider is 0-100, max gain kept modest
+  }
+  function startPad(key) {
+    var freqs = padFreqsForKey(key);
+    if (!freqs) { showToast("This song doesn't have a key set yet, so there's nothing to drone.", true); return; }
+    stopPad(true);
+    try {
+      var ctx = getAudioCtx();
+      var now = ctx.currentTime;
+
+      var master = ctx.createGain();
+      master.gain.setValueAtTime(0.0001, now);
+      master.gain.exponentialRampToValueAtTime(Math.max(padVolumeValue(), 0.0005), now + 1.8);
+      master.connect(ctx.destination);
+
+      var filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 1100;
+      filter.Q.value = 0.6;
+      filter.connect(master);
+
+      var lfo = ctx.createOscillator();
+      lfo.frequency.value = 0.06;
+      var lfoGain = ctx.createGain();
+      lfoGain.gain.value = 250;
+      lfo.connect(lfoGain);
+      lfoGain.connect(filter.frequency);
+      lfo.start(now);
+
+      var oscs = [];
+      [freqs.root, freqs.fifth].forEach(function (freq) {
+        [-6, 6].forEach(function (detuneCents) {
+          var osc = ctx.createOscillator();
+          osc.type = "sawtooth";
+          osc.frequency.value = freq;
+          osc.detune.value = detuneCents;
+          var g = ctx.createGain();
+          g.gain.value = 0.5;
+          osc.connect(g); g.connect(filter);
+          osc.start(now);
+          oscs.push(osc);
+        });
+      });
+
+      state.padNodes = { oscs: oscs, lfo: lfo, master: master, filter: filter };
+      state.padPlaying = true;
+      state.padKey = key;
+      $("padToggle").innerHTML = "&#10074;&#10074; Pad";
+    } catch (e) {
+      showToast("Couldn't start the pad: " + e.message, true);
+    }
+  }
+  function retunePad(key) {
+    if (!state.padNodes || !state.padPlaying) return;
+    var freqs = padFreqsForKey(key);
+    if (!freqs) { stopPad(false); return; }
+    var ctx = state.audioCtx;
+    var now = ctx.currentTime;
+    var targets = [freqs.root, freqs.root, freqs.fifth, freqs.fifth];
+    state.padNodes.oscs.forEach(function (osc, i) {
+      try { osc.frequency.setTargetAtTime(targets[i], now, 0.4); } catch (e) {}
+    });
+    state.padKey = key;
+  }
+  function stopPad(immediate) {
+    if (!state.padNodes) { state.padPlaying = false; return; }
+    var nodes = state.padNodes;
+    var ctx = state.audioCtx;
+    state.padNodes = null;
+    state.padPlaying = false;
+    var btn = $("padToggle");
+    if (btn) btn.innerHTML = "&#9654; Pad";
+    if (!ctx) return;
+    var now = ctx.currentTime;
+    var fade = immediate ? 0.05 : 1.3;
+    try {
+      nodes.master.gain.cancelScheduledValues(now);
+      nodes.master.gain.setValueAtTime(nodes.master.gain.value, now);
+      nodes.master.gain.exponentialRampToValueAtTime(0.0001, now + fade);
+    } catch (e) {}
+    setTimeout(function () {
+      try {
+        nodes.oscs.forEach(function (o) { o.stop(); });
+        nodes.lfo.stop();
+      } catch (e) {}
+    }, fade * 1000 + 80);
+  }
+  $("padToggle").addEventListener("click", function () {
+    if (state.padPlaying) { stopPad(false); return; }
+    startPad(state.currentKey);
+  });
+  $("padVolume").addEventListener("input", function () {
+    if (state.padNodes) {
+      try { state.padNodes.master.gain.setTargetAtTime(padVolumeValue(), state.audioCtx.currentTime, 0.1); } catch (e) {}
+    }
   });
 
   /* ============================== ADD TO SUNDAY (from song view) ============================== */
@@ -1777,7 +1910,7 @@
     document.querySelectorAll(".tab-btn").forEach(function (b) {
       b.classList.toggle("active", b.getAttribute("data-tab") === tab);
     });
-    if (tab !== "song") { stopAutoscroll(); stopMetronome(); }
+    if (tab !== "song") { stopAutoscroll(); stopMetronome(); stopPad(true); }
   }
   document.querySelectorAll(".tab-btn").forEach(function (b) {
     b.addEventListener("click", function () { setTab(b.getAttribute("data-tab")); });
