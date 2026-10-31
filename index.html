@@ -305,10 +305,23 @@
   .anno-arrow-svg .anno-arrow-hit:active { cursor: grabbing; }
 
   /* Setlist (all songs for one Sunday, one scrollable page) */
-  .setlist-song-block { margin-bottom: 30px; padding-bottom: 22px; border-bottom: 1px dashed var(--border); }
-  .setlist-song-block:last-child { border-bottom: none; }
+  .setlist-song-block { margin-bottom: 0; }
   .setlist-song-block h3 { font-size: 1.25rem; margin-bottom: 2px; }
   .setlist-song-block .meta-line { margin: 0 0 10px; }
+  /* The adjustable gap between one song and the next. Its whole height
+     lives in margin-top (set inline per-boundary, draggable by the handle),
+     so dragging it to 0 — or further, negative — closes the whitespace and
+     can even pull the next song up to overlap the one above it. */
+  .setlist-gap { position: relative; height: 0; }
+  .setlist-gap-line { border-top: 1px dashed var(--border); }
+  .setlist-gap-handle {
+    position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%);
+    width: 36px; height: 22px; border-radius: 999px; background: var(--surface-2);
+    border: 1px solid var(--border); color: var(--text-dim); font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: center; cursor: ns-resize;
+    user-select: none; touch-action: none; z-index: 6;
+  }
+  .setlist-gap-handle:hover, .setlist-gap-handle:active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 
   /* Export to PDF via the browser's print dialog */
   @media print {
@@ -318,13 +331,14 @@
     .chart-scroll { overflow: visible !important; padding-bottom: 0; }
     .chart-page-wrap, .line-pair { page-break-inside: avoid; }
     .section-header { page-break-after: avoid; }
-    .setlist-song-block + .setlist-song-block { page-break-before: always; }
+    .setlist-gap + .setlist-song-block { page-break-before: always; }
     /* Each song already force-starts its own page above, so the on-screen
-       spacer/divider between songs (margin + padding + dashed border) just
-       trails after a full-page chart image with nowhere left to go on that
-       page — spilling onto its own near-blank page before the next song's
-       forced break kicks in. It's not needed once songs are one-per-page. */
-    .setlist-song-block { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+       gap/divider between songs — including whatever spacing was dragged in
+       — just trails after a full-page chart image with nowhere left to go
+       on that page, spilling onto its own near-blank page before the next
+       song's forced break kicks in. It's not needed once songs are
+       one-per-page, and the drag handle is screen-only regardless. */
+    .setlist-gap { display: none !important; }
     /* Each extra page-image starts fresh; the first starts wherever it
        naturally falls so a short header above it doesn't strand it alone
        on the next page with a near-empty page before it. */
@@ -1566,7 +1580,68 @@
       return '<div class="setlist-song-block' + (isImageSong ? " image-source" : "") + '">' +
         '<div class="song-block-header">' + titleHtml + metaHtml + "</div>" +
         '<div class="chart-box">' + chartHtml + "</div></div>";
+    }).map(function (blockHtml, i) {
+      if (i === 0) return blockHtml;
+      var gapPx = setlistGapValue(sun, i);
+      return '<div class="setlist-gap" data-gapidx="' + i + '" style="margin-top:' + gapPx + 'px;">' +
+        '<div class="setlist-gap-line"></div>' +
+        '<div class="setlist-gap-handle editor-only" title="Drag to close up the space before this song (drag further to overlap it) — double-click to reset">&#8597;</div>' +
+        "</div>" + blockHtml;
     }).join("");
+    wireSetlistGapHandles(sun);
+  }
+
+  // The gap above song #idx (1-based; song 0 has nothing before it) is
+  // stored as a plain margin-top in pixels, keyed by that index, so it's one
+  // independent, draggable number per boundary rather than a fixed CSS rule.
+  var SETLIST_GAP_DEFAULT = 52;
+  function setlistGapValue(sun, idx) {
+    return (sun.gaps && sun.gaps[idx] !== undefined) ? sun.gaps[idx] : SETLIST_GAP_DEFAULT;
+  }
+  function saveSetlistGaps(sun) {
+    apiFetch("PATCH", "/api/sundays/" + sun.id, { gaps: sun.gaps || {} }).catch(function (e) {
+      showToast("Couldn't save that spacing change: " + e.message, true);
+    });
+  }
+  function wireSetlistGapHandles(sun) {
+    if (state.role !== "editor") return;
+    var body = $("setlistBody");
+    Array.prototype.forEach.call(body.querySelectorAll(".setlist-gap"), function (gapEl) {
+      var idx = gapEl.getAttribute("data-gapidx");
+      var handle = gapEl.querySelector(".setlist-gap-handle");
+      if (!handle) return;
+      function afterChange() {
+        saveSetlistGaps(sun);
+        // Annotations are positioned as a percentage of the whole canvas's
+        // height, so when dragging a gap changes that total height, refresh
+        // them to the best-effort position under the new layout.
+        if (sun.annotations && sun.annotations.length) renderAnnotations(sun);
+      }
+      handle.addEventListener("pointerdown", function (e) {
+        if (e.button !== undefined && e.button !== 0) return;
+        var startY = e.clientY;
+        var startGap = setlistGapValue(sun, idx);
+        try { handle.setPointerCapture(e.pointerId); } catch (err) {}
+        function onMove(ev) {
+          var next = Math.min(300, Math.max(-200, startGap + (ev.clientY - startY)));
+          sun.gaps = sun.gaps || {};
+          sun.gaps[idx] = next;
+          gapEl.style.marginTop = next + "px";
+        }
+        function onUp() {
+          handle.removeEventListener("pointermove", onMove);
+          handle.removeEventListener("pointerup", onUp);
+          afterChange();
+        }
+        handle.addEventListener("pointermove", onMove);
+        handle.addEventListener("pointerup", onUp);
+      });
+      handle.addEventListener("dblclick", function () {
+        if (sun.gaps) delete sun.gaps[idx];
+        gapEl.style.marginTop = SETLIST_GAP_DEFAULT + "px";
+        afterChange();
+      });
+    });
   }
 
   /* ============================== SET ANNOTATIONS ============================== */
