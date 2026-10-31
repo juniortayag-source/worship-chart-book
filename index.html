@@ -4,58 +4,67 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>MFBC Worship Team</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Sora:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
+  /*
+    Palette modeled on mfbcchurch.ca (Mississauga Family Baptist Church):
+    a deep navy backdrop with warm cream text and a muted gold accent,
+    Cormorant Garamond for display/headings and Figtree for body/UI text.
+    The site itself has no separate light theme, so this app intentionally
+    uses the same look regardless of the visitor's system preference —
+    the dark-mode and data-theme blocks below just restate it so nothing
+    else in the stylesheet needs to change.
+  */
   :root {
-    color-scheme: light;
-    --bg: #f6f7f5;
-    --surface: #ffffff;
-    --surface-2: #edefeb;
-    --text: #1d2320;
-    --text-dim: #5c655f;
-    --border: #dde1dc;
-    --accent: #2f6f5e;
-    --accent-dim: #dbeae5;
-    --accent-contrast: #ffffff;
-    --chord: #b3562a;
-    --danger: #b34242;
-    --shadow: 0 1px 2px rgba(20, 30, 25, 0.06), 0 4px 16px rgba(20, 30, 25, 0.06);
-    --font-display: "Fraunces", Georgia, serif;
-    --font-body: "Sora", system-ui, sans-serif;
+    color-scheme: dark;
+    --bg: #04161f;
+    --surface: #0b2531;
+    --surface-2: #123244;
+    --text: #f4efe7;
+    --text-dim: #9c9184;
+    --border: #1e3744;
+    --accent: #c9ae84;
+    --accent-dim: #2a2518;
+    --accent-contrast: #04161f;
+    --chord: #e4956a;
+    --danger: #e08080;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 20px rgba(0, 0, 0, 0.4);
+    --font-display: "Cormorant Garamond", Georgia, serif;
+    --font-body: "Figtree", system-ui, sans-serif;
     --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
     --chart-font-size: 16px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       color-scheme: dark;
-      --bg: #14181a;
-      --surface: #1c2123;
-      --surface-2: #252b2c;
-      --text: #edefec;
-      --text-dim: #9aa39d;
-      --border: #303735;
-      --accent: #5cb69c;
-      --accent-dim: #223530;
-      --accent-contrast: #0c1211;
+      --bg: #04161f;
+      --surface: #0b2531;
+      --surface-2: #123244;
+      --text: #f4efe7;
+      --text-dim: #9c9184;
+      --border: #1e3744;
+      --accent: #c9ae84;
+      --accent-dim: #2a2518;
+      --accent-contrast: #04161f;
       --chord: #e4956a;
       --danger: #e08080;
-      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 20px rgba(0, 0, 0, 0.35);
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 20px rgba(0, 0, 0, 0.4);
     }
   }
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #14181a;
-    --surface: #1c2123;
-    --surface-2: #252b2c;
-    --text: #edefec;
-    --text-dim: #9aa39d;
-    --border: #303735;
-    --accent: #5cb69c;
-    --accent-dim: #223530;
-    --accent-contrast: #0c1211;
+    --bg: #04161f;
+    --surface: #0b2531;
+    --surface-2: #123244;
+    --text: #f4efe7;
+    --text-dim: #9c9184;
+    --border: #1e3744;
+    --accent: #c9ae84;
+    --accent-dim: #2a2518;
+    --accent-contrast: #04161f;
     --chord: #e4956a;
     --danger: #e08080;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 20px rgba(0, 0, 0, 0.35);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 20px rgba(0, 0, 0, 0.4);
   }
   * { box-sizing: border-box; }
   html { scroll-padding-top: env(safe-area-inset-top, 0px); }
@@ -83,29 +92,31 @@
   .brand .mark { color: var(--accent); font-size: 1.5rem; }
   .subtitle { color: var(--text-dim); font-size: 0.85rem; }
 
-  .tabs { display: flex; gap: 4px; margin: 18px 0 20px; border-bottom: 1px solid var(--border); }
-  .tab-btn {
-    background: none; border: none; padding: 10px 4px; margin-right: 20px;
-    font-size: 0.95rem; font-weight: 600; color: var(--text-dim);
-    border-bottom: 2px solid transparent; translate: 0 1px;
+  .tabs {
+    display: flex; gap: 4px; margin: 18px 0 20px; width: fit-content;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 4px;
   }
-  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn {
+    background: none; border: none; padding: 9px 18px; margin: 0; border-radius: 999px;
+    font-size: 0.9rem; font-weight: 600; color: var(--text-dim);
+  }
+  .tab-btn.active { color: var(--accent-contrast); background: var(--accent); }
 
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .spacer { flex: 1; }
 
   .btn {
     display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border);
-    background: var(--surface); color: var(--text); border-radius: 9px; padding: 9px 14px;
+    background: var(--surface); color: var(--text); border-radius: 999px; padding: 9px 16px;
     font-size: 0.88rem; font-weight: 600; box-shadow: var(--shadow);
   }
   .btn:hover { border-color: var(--accent); }
   .btn.primary { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
   .btn.danger { color: var(--danger); border-color: var(--border); }
   .btn.ghost { box-shadow: none; border-color: transparent; background: transparent; }
-  .btn.small { padding: 6px 10px; font-size: 0.78rem; }
+  .btn.small { padding: 6px 12px; font-size: 0.78rem; }
   .btn:disabled { opacity: 0.5; cursor: default; }
-  .icon-btn { border: none; background: none; color: var(--text-dim); font-size: 1rem; padding: 4px 8px; border-radius: 6px; }
+  .icon-btn { border: none; background: none; color: var(--text-dim); font-size: 1rem; padding: 4px 8px; border-radius: 999px; }
   .icon-btn:hover { background: var(--surface-2); color: var(--text); }
 
   input[type=text], input[type=date], input[type=number], select, textarea, input[type=search] {
@@ -121,8 +132,8 @@
   .empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
   .empty-state h3 { color: var(--text); margin-bottom: 6px; }
 
-  .view-toggle { display: flex; gap: 2px; border: 1px solid var(--border); border-radius: 9px; padding: 2px; background: var(--surface); box-shadow: var(--shadow); }
-  .view-toggle button { border: none; background: none; color: var(--text-dim); border-radius: 7px; padding: 7px 11px; font-size: 0.82rem; font-weight: 600; }
+  .view-toggle { display: flex; gap: 2px; border: 1px solid var(--border); border-radius: 999px; padding: 2px; background: var(--surface); box-shadow: var(--shadow); }
+  .view-toggle button { border: none; background: none; color: var(--text-dim); border-radius: 999px; padding: 7px 11px; font-size: 0.82rem; font-weight: 600; }
   .view-toggle button.active { background: var(--accent-dim); color: var(--accent); }
 
   .song-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-top: 4px; }
@@ -225,9 +236,7 @@
   .top-songs-list .trow .count { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: 0.8rem; }
 
   .banner { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 16px; }
-  .banner.warn { background: #fbeee4; color: #8a4a1c; border-color: #f0d3b8; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .banner.warn { background: #3a2a1a; color: #f0c090; border-color: #55432a; } }
-  :root[data-theme="dark"] .banner.warn { background: #3a2a1a; color: #f0c090; border-color: #55432a; }
+  .banner.warn { background: #3a2a1a; color: #f0c090; border-color: #55432a; }
 
   .searchbar { max-width: 320px; }
   .remove-row-btn { color: var(--danger); background: none; border: none; font-size: 0.78rem; font-weight: 600; }
