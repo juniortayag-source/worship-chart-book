@@ -1615,12 +1615,13 @@
 
   /* ============================== AMBIENT PAD ============================== */
   // A soft root+fifth drone in the song's current (possibly transposed) key,
-  // synthesized entirely in the browser — no audio files. Two slightly
-  // detuned sawtooth oscillators per note give it a warm "unison" pad
-  // texture, a lowpass filter rounds off the edge, and a very slow LFO on
-  // the filter's cutoff gives it a little gentle movement instead of
-  // sounding static. Fades in/out over a second or so instead of clicking
-  // on/off, and glides to a new key instead of restarting when you
+  // synthesized entirely in the browser — no audio files. Each note is a
+  // small stack of detuned layers (a sub an octave down for body, a trio of
+  // unison voices for thickness, a quiet octave-up voice for air) run
+  // through two lowpass filters in series for a rounder, less buzzy edge,
+  // with a very slow LFO on the cutoff for gentle movement instead of
+  // sounding static. Fades in/out over a couple of seconds instead of
+  // clicking on/off, and glides to a new key instead of restarting when you
   // transpose while it's already playing.
   state.padPlaying = false; state.padNodes = null; state.padKey = null;
 
@@ -1629,11 +1630,29 @@
     var rootIdx = keyRootIndex(key);
     if (rootIdx == null) return null;
     var rootMidi = 48 + rootIdx; // root in a low-ish octave (around C3) for a warm drone
-    return { root: padMidiFreq(rootMidi), fifth: padMidiFreq(rootMidi + 7) };
+    return {
+      sub: padMidiFreq(rootMidi - 12),
+      root: padMidiFreq(rootMidi),
+      fifth: padMidiFreq(rootMidi + 7),
+      shimmer: padMidiFreq(rootMidi + 12)
+    };
   }
   function padVolumeValue() {
     return (parseInt($("padVolume").value, 10) || 0) / 100 * 0.3; // slider is 0-100, max gain kept modest
   }
+  // Each layer's role picks which note (from padFreqsForKey) it tracks, so
+  // retuning just looks the new frequency up by role instead of relying on
+  // array order.
+  var PAD_LAYERS = [
+    { role: "sub", type: "sine", detune: 0, gain: 0.34 },
+    { role: "root", type: "sawtooth", detune: -7, gain: 0.24 },
+    { role: "root", type: "sawtooth", detune: 0, gain: 0.24 },
+    { role: "root", type: "sawtooth", detune: 7, gain: 0.24 },
+    { role: "fifth", type: "sawtooth", detune: -7, gain: 0.18 },
+    { role: "fifth", type: "sawtooth", detune: 0, gain: 0.18 },
+    { role: "fifth", type: "sawtooth", detune: 7, gain: 0.18 },
+    { role: "shimmer", type: "triangle", detune: 0, gain: 0.1 }
+  ];
   function startPad(key) {
     var freqs = padFreqsForKey(key);
     if (!freqs) { showToast("This song doesn't have a key set yet, so there's nothing to drone.", true); return; }
@@ -1644,39 +1663,44 @@
 
       var master = ctx.createGain();
       master.gain.setValueAtTime(0.0001, now);
-      master.gain.exponentialRampToValueAtTime(Math.max(padVolumeValue(), 0.0005), now + 1.8);
+      master.gain.exponentialRampToValueAtTime(Math.max(padVolumeValue(), 0.0005), now + 2.2);
       master.connect(ctx.destination);
 
+      // Two gentle lowpass stages in series round off the top end a lot
+      // more than one filter alone, which is most of what makes this sound
+      // soft instead of buzzy.
       var filter = ctx.createBiquadFilter();
       filter.type = "lowpass";
-      filter.frequency.value = 1100;
-      filter.Q.value = 0.6;
-      filter.connect(master);
+      filter.frequency.value = 650;
+      filter.Q.value = 0.4;
+      var filter2 = ctx.createBiquadFilter();
+      filter2.type = "lowpass";
+      filter2.frequency.value = 850;
+      filter2.Q.value = 0.4;
+      filter.connect(filter2);
+      filter2.connect(master);
 
       var lfo = ctx.createOscillator();
-      lfo.frequency.value = 0.06;
+      lfo.frequency.value = 0.05;
       var lfoGain = ctx.createGain();
-      lfoGain.gain.value = 250;
+      lfoGain.gain.value = 120;
       lfo.connect(lfoGain);
       lfoGain.connect(filter.frequency);
       lfo.start(now);
 
-      var oscs = [];
-      [freqs.root, freqs.fifth].forEach(function (freq) {
-        [-6, 6].forEach(function (detuneCents) {
-          var osc = ctx.createOscillator();
-          osc.type = "sawtooth";
-          osc.frequency.value = freq;
-          osc.detune.value = detuneCents;
-          var g = ctx.createGain();
-          g.gain.value = 0.5;
-          osc.connect(g); g.connect(filter);
-          osc.start(now);
-          oscs.push(osc);
-        });
+      var oscs = PAD_LAYERS.map(function (spec) {
+        var osc = ctx.createOscillator();
+        osc.type = spec.type;
+        osc.frequency.value = freqs[spec.role];
+        osc.detune.value = spec.detune;
+        var g = ctx.createGain();
+        g.gain.value = spec.gain;
+        osc.connect(g); g.connect(filter);
+        osc.start(now);
+        return { osc: osc, role: spec.role };
       });
 
-      state.padNodes = { oscs: oscs, lfo: lfo, master: master, filter: filter };
+      state.padNodes = { oscs: oscs, lfo: lfo, master: master, filter: filter, filter2: filter2 };
       state.padPlaying = true;
       state.padKey = key;
       $("padToggle").innerHTML = "&#10074;&#10074; Pad";
@@ -1690,9 +1714,8 @@
     if (!freqs) { stopPad(false); return; }
     var ctx = state.audioCtx;
     var now = ctx.currentTime;
-    var targets = [freqs.root, freqs.root, freqs.fifth, freqs.fifth];
-    state.padNodes.oscs.forEach(function (osc, i) {
-      try { osc.frequency.setTargetAtTime(targets[i], now, 0.4); } catch (e) {}
+    state.padNodes.oscs.forEach(function (item) {
+      try { item.osc.frequency.setTargetAtTime(freqs[item.role], now, 0.4); } catch (e) {}
     });
     state.padKey = key;
   }
@@ -1706,7 +1729,7 @@
     if (btn) btn.innerHTML = "&#9654; Pad";
     if (!ctx) return;
     var now = ctx.currentTime;
-    var fade = immediate ? 0.05 : 1.3;
+    var fade = immediate ? 0.05 : 1.8;
     try {
       nodes.master.gain.cancelScheduledValues(now);
       nodes.master.gain.setValueAtTime(nodes.master.gain.value, now);
@@ -1714,7 +1737,7 @@
     } catch (e) {}
     setTimeout(function () {
       try {
-        nodes.oscs.forEach(function (o) { o.stop(); });
+        nodes.oscs.forEach(function (item) { item.osc.stop(); });
         nodes.lfo.stop();
       } catch (e) {}
     }, fade * 1000 + 80);
