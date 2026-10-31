@@ -1623,7 +1623,7 @@
         var startGap = setlistGapValue(sun, idx);
         try { handle.setPointerCapture(e.pointerId); } catch (err) {}
         function onMove(ev) {
-          var next = Math.min(1200, Math.max(-200, startGap + (ev.clientY - startY)));
+          var next = Math.min(300, Math.max(-1200, startGap + (ev.clientY - startY)));
           sun.gaps = sun.gaps || {};
           sun.gaps[idx] = next;
           gapEl.style.marginTop = next + "px";
