@@ -180,6 +180,19 @@
 
   .toast-stack { position: fixed; left: 0; right: 0; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 90; pointer-events: none; }
   .yt-audio-host { position: fixed; width: 1px; height: 1px; bottom: 0; right: 0; opacity: 0.01; overflow: hidden; pointer-events: none; }
+  .yt-scrub-wrap { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; min-width: 160px; }
+  .yt-time { font-size: 0.75rem; color: var(--text-dim); font-variant-numeric: tabular-nums; min-width: 34px; text-align: center; }
+  .yt-scrub { position: relative; flex: 1; height: 22px; cursor: pointer; touch-action: none; }
+  .yt-scrub-track { position: absolute; left: 0; right: 0; top: 50%; height: 4px; transform: translateY(-50%); background: var(--surface-2); border-radius: 2px; }
+  .yt-scrub-fill { position: absolute; left: 0; top: 50%; height: 4px; transform: translateY(-50%); background: var(--accent); border-radius: 2px; pointer-events: none; width: 0%; }
+  .yt-scrub-loop { position: absolute; top: 50%; height: 4px; transform: translateY(-50%); background: var(--chord); opacity: 0.5; border-radius: 2px; pointer-events: none; left: 0%; width: 100%; }
+  .yt-scrub-handle { position: absolute; top: 50%; left: 0%; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 2px var(--bg); }
+  .yt-loop-handle {
+    position: absolute; top: 50%; width: 10px; height: 18px; border-radius: 3px; background: var(--chord);
+    transform: translate(-50%, -50%); cursor: ew-resize; touch-action: none; z-index: 2;
+  }
+  .yt-loop-handle.start { left: 0%; }
+  .yt-loop-handle.end { left: 100%; }
   .toast { background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; box-shadow: var(--shadow); max-width: 90vw; text-align: center; }
   .toast.error { background: var(--danger); color: #fff; }
 
@@ -457,8 +470,27 @@
         <span class="label-txt">Pad vol</span>
         <input type="range" min="0" max="100" value="35" id="padVolume" style="width:80px;">
       </div>
-      <div class="control-group" id="ytGroup" hidden>
-        <button class="btn small" id="ytToggle" title="Play this song's reference track from YouTube in the background">&#9654; Reference track</button>
+    </div>
+
+    <div class="controls-bar" id="ytBar" hidden>
+      <div class="control-group">
+        <button class="icon-btn" id="ytToggle" title="Play/pause the reference track">&#9654;</button>
+      </div>
+      <div class="yt-scrub-wrap">
+        <span class="yt-time" id="ytTimeCur">0:00</span>
+        <div class="yt-scrub" id="ytScrub" title="Click or drag to seek">
+          <div class="yt-scrub-track"></div>
+          <div class="yt-scrub-loop" id="ytScrubLoop"></div>
+          <div class="yt-scrub-fill" id="ytScrubFill"></div>
+          <div class="yt-loop-handle start editor-only" id="ytLoopStartHandle" title="Drag to set where the loop starts"></div>
+          <div class="yt-loop-handle end editor-only" id="ytLoopEndHandle" title="Drag to set where the loop ends"></div>
+          <div class="yt-scrub-handle" id="ytScrubHandle"></div>
+        </div>
+        <span class="yt-time" id="ytTimeDur">0:00</span>
+      </div>
+      <div class="control-group">
+        <button class="btn small" id="ytLoopToggle" title="Loop playback between the two markers on the bar">Loop: Off</button>
+        <button class="icon-btn editor-only" id="ytLoopClear" title="Clear the loop markers">&times;</button>
       </div>
     </div>
 
@@ -1263,6 +1295,7 @@
     var s = songs.find(function (x) { return x.id === songId; });
     state.songId = songId; state.transpose = 0; stopAutoscroll(); stopMetronome(); stopPad(true); stopYoutubeTrack();
     state.metroBpm = Math.max(40, Math.min(240, (s && s.bpm) || 90));
+    resetYtBarUI(s);
     setTab("song");
     renderSongView();
   }
@@ -1318,7 +1351,7 @@
     $("songKeyChip").style.display = shownKey || state.transpose ? "" : "none";
     state.currentKey = shownKey || null;
     if (state.padPlaying && state.padKey !== state.currentKey) retunePad(state.currentKey);
-    $("ytGroup").hidden = !youtubeVideoId(s.youtubeUrl);
+    $("ytBar").hidden = !youtubeVideoId(s.youtubeUrl);
     $("transVal").textContent = (state.transpose > 0 ? "+" : "") + state.transpose;
     $("fontVal").textContent = state.fontSize;
     document.documentElement.style.setProperty("--chart-font-size", state.fontSize + "px");
@@ -2220,15 +2253,26 @@
 
   /* ============================== YOUTUBE REFERENCE TRACK ============================== */
   // A song can carry a YouTube link (set in "Edit song"); this plays it in
-  // the background while practicing. The IFrame API's player lives in a 1x1
-  // off-screen host (see .yt-audio-host), so this is audio-only to the
-  // user — just a play/pause toggle, no video to look at.
-  state.yt = { player: null, apiLoading: false, videoId: null, playing: false, readyCallbacks: [] };
+  // the background while practicing, with a scrub bar to seek around and
+  // two draggable markers to loop just one section (a bridge, a tricky
+  // transition, etc). The IFrame API's player lives in a 1x1 off-screen
+  // host (see .yt-audio-host), so this is audio-only to the user.
+  state.yt = {
+    player: null, apiLoading: false, readyCallbacks: [],
+    songId: null, videoId: null, playing: false,
+    duration: 0, currentTime: 0, loopStart: null, loopEnd: null, loopEnabled: false,
+    pollTimer: null
+  };
 
   function youtubeVideoId(url) {
     if (!url) return null;
     var m = String(url).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|[?&]v=)([A-Za-z0-9_-]{11})/);
     return m ? m[1] : null;
+  }
+  function fmtYtTime(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
   }
   function ensureYoutubeApi(onReady) {
     if (window.YT && window.YT.Player) { onReady(); return; }
@@ -2245,9 +2289,58 @@
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
   }
+  // Called once per song (from openSong), not on every renderSongView —
+  // transposing/font-size changes re-render the song view far more often
+  // than that, and would otherwise stomp on live playback/loop state.
+  function resetYtBarUI(s) {
+    state.yt.songId = s ? s.id : null;
+    state.yt.duration = 0;
+    state.yt.currentTime = 0;
+    state.yt.loopStart = (s && typeof s.loopStart === "number") ? s.loopStart : null;
+    state.yt.loopEnd = (s && typeof s.loopEnd === "number") ? s.loopEnd : null;
+    state.yt.loopEnabled = false;
+    $("ytLoopToggle").textContent = "Loop: Off";
+    setYtButtonLabel(false);
+    updateYtBarVisuals();
+  }
   function setYtButtonLabel(isPlaying) {
     var btn = $("ytToggle");
-    if (btn) btn.innerHTML = isPlaying ? "&#10074;&#10074; Reference track" : "&#9654; Reference track";
+    if (btn) btn.innerHTML = isPlaying ? "&#10074;&#10074;" : "&#9654;";
+  }
+  function updateYtBarVisuals() {
+    var dur = state.yt.duration;
+    var cur = state.yt.currentTime;
+    $("ytTimeCur").textContent = fmtYtTime(cur);
+    $("ytTimeDur").textContent = fmtYtTime(dur);
+    var curPct = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0;
+    $("ytScrubFill").style.width = curPct + "%";
+    $("ytScrubHandle").style.left = curPct + "%";
+    var startPct = (dur > 0 && state.yt.loopStart != null) ? (state.yt.loopStart / dur) * 100 : 0;
+    var endPct = (dur > 0 && state.yt.loopEnd != null) ? (state.yt.loopEnd / dur) * 100 : 100;
+    $("ytLoopStartHandle").style.left = startPct + "%";
+    $("ytLoopEndHandle").style.left = endPct + "%";
+    $("ytScrubLoop").style.left = startPct + "%";
+    $("ytScrubLoop").style.width = Math.max(0, endPct - startPct) + "%";
+  }
+  function startYtPoll() {
+    stopYtPoll();
+    state.yt.pollTimer = setInterval(function () {
+      if (!state.yt.player || !state.yt.player.getCurrentTime) return;
+      try {
+        state.yt.currentTime = state.yt.player.getCurrentTime();
+        var dur = state.yt.player.getDuration();
+        if (dur > 0) state.yt.duration = dur;
+      } catch (e) { return; }
+      updateYtBarVisuals();
+      if (state.yt.loopEnabled && state.yt.loopStart != null && state.yt.loopEnd != null && state.yt.loopEnd > state.yt.loopStart) {
+        if (state.yt.currentTime >= state.yt.loopEnd - 0.15 || state.yt.currentTime < state.yt.loopStart - 0.5) {
+          state.yt.player.seekTo(state.yt.loopStart, true);
+        }
+      }
+    }, 250);
+  }
+  function stopYtPoll() {
+    if (state.yt.pollTimer) { clearInterval(state.yt.pollTimer); state.yt.pollTimer = null; }
   }
   function playYoutubeTrack(videoId) {
     ensureYoutubeApi(function () {
@@ -2263,6 +2356,7 @@
             var playing = e.data === YT.PlayerState.PLAYING;
             state.yt.playing = playing;
             setYtButtonLabel(playing);
+            if (playing) { startYtPoll(); } else { stopYtPoll(); }
           }
         }
       });
@@ -2270,10 +2364,25 @@
   }
   function stopYoutubeTrack() {
     state.yt.playing = false;
+    stopYtPoll();
     setYtButtonLabel(false);
     if (state.yt.player && state.yt.player.pauseVideo) {
       try { state.yt.player.pauseVideo(); } catch (e) {}
     }
+  }
+  function saveYtLoopPoints() {
+    var s = songs.find(function (x) { return x.id === state.songId; });
+    if (!s) return;
+    s.loopStart = state.yt.loopStart;
+    s.loopEnd = state.yt.loopEnd;
+    apiFetch("PATCH", "/api/songs/" + s.id, { loopStart: s.loopStart, loopEnd: s.loopEnd }).catch(function (e) {
+      showToast("Couldn't save the loop markers: " + e.message, true);
+    });
+  }
+  function ytTimeFromClientX(clientX) {
+    var rect = $("ytScrub").getBoundingClientRect();
+    var pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return pct * (state.yt.duration || 0);
   }
   $("ytToggle").addEventListener("click", function () {
     var s = songs.find(function (x) { return x.id === state.songId; });
@@ -2281,6 +2390,67 @@
     if (!videoId) { showToast("No YouTube link set for this song.", true); return; }
     if (state.yt.playing && state.yt.videoId === videoId) { stopYoutubeTrack(); return; }
     playYoutubeTrack(videoId);
+  });
+  $("ytScrub").addEventListener("pointerdown", function (e) {
+    if (e.target.closest(".yt-loop-handle")) return;
+    if (!state.yt.player || !state.yt.duration) { showToast("Press play first so the track's length is known.", true); return; }
+    var el = e.currentTarget;
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    function seekToClientX(clientX) {
+      var t = ytTimeFromClientX(clientX);
+      state.yt.currentTime = t;
+      updateYtBarVisuals();
+      state.yt.player.seekTo(t, true);
+    }
+    seekToClientX(e.clientX);
+    function onMove(ev) { seekToClientX(ev.clientX); }
+    function onUp() {
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+    }
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+  });
+  function wireYtLoopHandle(handleEl, which) {
+    handleEl.addEventListener("pointerdown", function (e) {
+      e.stopPropagation();
+      if (!state.yt.duration) { showToast("Press play first so the track's length is known.", true); return; }
+      try { handleEl.setPointerCapture(e.pointerId); } catch (err) {}
+      function onMove(ev) {
+        var t = ytTimeFromClientX(ev.clientX);
+        if (which === "start") {
+          var maxStart = (state.yt.loopEnd != null ? state.yt.loopEnd : state.yt.duration) - 0.5;
+          state.yt.loopStart = Math.max(0, Math.min(t, maxStart));
+        } else {
+          var minEnd = (state.yt.loopStart != null ? state.yt.loopStart : 0) + 0.5;
+          state.yt.loopEnd = Math.min(state.yt.duration, Math.max(t, minEnd));
+        }
+        updateYtBarVisuals();
+      }
+      function onUp() {
+        handleEl.removeEventListener("pointermove", onMove);
+        handleEl.removeEventListener("pointerup", onUp);
+        saveYtLoopPoints();
+      }
+      handleEl.addEventListener("pointermove", onMove);
+      handleEl.addEventListener("pointerup", onUp);
+    });
+  }
+  wireYtLoopHandle($("ytLoopStartHandle"), "start");
+  wireYtLoopHandle($("ytLoopEndHandle"), "end");
+  $("ytLoopToggle").addEventListener("click", function () {
+    if (state.yt.loopStart == null || state.yt.loopEnd == null) {
+      showToast("Drag the two markers on the bar to set a loop first.", true);
+      return;
+    }
+    state.yt.loopEnabled = !state.yt.loopEnabled;
+    $("ytLoopToggle").textContent = "Loop: " + (state.yt.loopEnabled ? "On" : "Off");
+  });
+  $("ytLoopClear").addEventListener("click", function () {
+    state.yt.loopStart = null; state.yt.loopEnd = null; state.yt.loopEnabled = false;
+    $("ytLoopToggle").textContent = "Loop: Off";
+    updateYtBarVisuals();
+    saveYtLoopPoints();
   });
 
   /* ============================== ADD TO SUNDAY (from song view) ============================== */
