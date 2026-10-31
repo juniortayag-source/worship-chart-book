@@ -277,7 +277,7 @@
   .annotation-layer { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 5; }
   .annotation-item { position: absolute; pointer-events: auto; }
   .annotation-note {
-    background: transparent; color: var(--chord); border: 1px dashed var(--chord);
+    background: transparent; color: #000; border: 1px dashed var(--chord);
     border-radius: 8px; padding: 8px 10px; font-size: 0.85rem; min-width: 90px; max-width: 260px;
     cursor: grab; white-space: pre-wrap; word-break: break-word;
     box-sizing: border-box; overflow: hidden;
@@ -337,7 +337,7 @@
     /* The annotations themselves (notes, shapes, arrows) print along with
        the set, since that's the point — but the drag/resize/delete handles
        are only useful on screen. */
-    .anno-resize-handle, .anno-arrow-handle, .anno-arrow-svg .anno-arrow-hit { display: none !important; }
+    .anno-resize-handle, .anno-arrow-handle, .anno-arrow-svg .anno-arrow-hit, .anno-delete { display: none !important; }
   }
 </style>
 </head>
@@ -1672,17 +1672,17 @@
         var noteSize = (a.wPct ? "width:" + ((a.wPct / 100) * canvasWidth) + "px;max-width:none;" : "") +
           (a.hPct ? "height:" + ((a.hPct / 100) * canvasWidth) + "px;" : "");
         return '<div class="annotation-item annotation-note" data-annoid="' + a.id + '" style="left:' + a.xPct + '%;top:' + noteTop + 'px;' + noteSize + '">' +
-          '<button class="anno-delete" data-del="' + a.id + '" title="Remove">&times;</button>' +
+          '<button class="anno-delete editor-only" data-del="' + a.id + '" title="Remove">&times;</button>' +
           '<span class="anno-note-text">' + esc(a.text || "Note") + "</span>" +
-          '<div class="anno-resize-handle"></div></div>';
+          '<div class="anno-resize-handle editor-only"></div></div>';
       }
       if (a.type === "rect" || a.type === "circle") {
         var shapeTop = (a.yPct / 100) * canvasHeight;
         var shapeW = (a.wPct / 100) * canvasWidth, shapeH = (a.hPct / 100) * canvasWidth;
         return '<div class="annotation-item annotation-shape' + (a.type === "circle" ? " circle" : "") + '" data-annoid="' + a.id + '" ' +
           'style="left:' + a.xPct + '%;top:' + shapeTop + 'px;width:' + shapeW + 'px;height:' + shapeH + 'px;">' +
-          '<button class="anno-delete" data-del="' + a.id + '" title="Remove">&times;</button>' +
-          '<div class="anno-resize-handle"></div></div>';
+          '<button class="anno-delete editor-only" data-del="' + a.id + '" title="Remove">&times;</button>' +
+          '<div class="anno-resize-handle editor-only"></div></div>';
       }
       if (a.type === "arrow") {
         var x1 = (a.x1Pct / 100) * canvasWidth, x2 = (a.x2Pct / 100) * canvasWidth;
@@ -1696,9 +1696,9 @@
           '<line class="anno-arrow-hit" x1="' + lx1 + '" y1="' + ly1 + '" x2="' + lx2 + '" y2="' + ly2 + '"></line>' +
           '<line class="anno-arrow-line" x1="' + lx1 + '" y1="' + ly1 + '" x2="' + lx2 + '" y2="' + ly2 + '" stroke="var(--chord)" stroke-width="3" marker-end="url(#annoHead' + a.id + ')"></line>' +
           "</svg>" +
-          '<div class="anno-arrow-handle" data-endpoint="' + a.id + ':1" style="left:' + a.x1Pct + '%;top:' + y1 + 'px;"></div>' +
-          '<div class="anno-arrow-handle" data-endpoint="' + a.id + ':2" style="left:' + a.x2Pct + '%;top:' + y2 + 'px;"></div>' +
-          '<button class="anno-delete standalone" data-del="' + a.id + '" title="Remove" style="left:' + ((a.x1Pct + a.x2Pct) / 2) + '%;top:' + ((y1 + y2) / 2) + 'px;">&times;</button>';
+          '<div class="anno-arrow-handle editor-only" data-endpoint="' + a.id + ':1" style="left:' + a.x1Pct + '%;top:' + y1 + 'px;"></div>' +
+          '<div class="anno-arrow-handle editor-only" data-endpoint="' + a.id + ':2" style="left:' + a.x2Pct + '%;top:' + y2 + 'px;"></div>' +
+          '<button class="anno-delete standalone editor-only" data-del="' + a.id + '" title="Remove" style="left:' + ((a.x1Pct + a.x2Pct) / 2) + '%;top:' + ((y1 + y2) / 2) + 'px;">&times;</button>';
       }
       return "";
     }).join("");
@@ -1707,6 +1707,10 @@
   }
 
   function wireAnnotationInteractions(sun) {
+    // Annotations are editors-only: a viewer sees the finished notes/shapes/
+    // arrows as static markup (no delete button, no resize/arrow handles —
+    // hidden via the editor-only class — and no drag or click-to-edit).
+    if (state.role !== "editor") return;
     var layer = $("annotationLayer");
 
     function startDrag(el, onMoveFn, onUpFn) {
