@@ -277,10 +277,10 @@
   .annotation-layer { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 5; }
   .annotation-item { position: absolute; pointer-events: auto; }
   .annotation-note {
-    background: var(--accent-dim); color: var(--text); border: 1px solid var(--accent);
+    background: transparent; color: var(--text); border: 1px dashed var(--accent);
     border-radius: 8px; padding: 8px 10px; font-size: 0.85rem; min-width: 90px; max-width: 260px;
-    box-shadow: var(--shadow); cursor: grab; white-space: pre-wrap; word-break: break-word;
-    box-sizing: border-box; overflow: auto;
+    cursor: grab; white-space: pre-wrap; word-break: break-word;
+    box-sizing: border-box; overflow: hidden;
   }
   .annotation-note:active { cursor: grabbing; }
   .annotation-shape { background: transparent; border: 3px solid var(--chord); cursor: grab; }
