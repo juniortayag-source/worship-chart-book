@@ -254,6 +254,16 @@
 
   .searchbar { max-width: 320px; }
   .remove-row-btn { color: var(--danger); background: none; border: none; font-size: 0.78rem; font-weight: 600; }
+  .song-entry-row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .song-entry-num { font-size: 0.78rem; color: var(--text-dim); font-weight: 600; min-width: 16px; }
+  .row-reorder-btns { display: flex; gap: 2px; }
+  .row-reorder-btns button {
+    width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .row-reorder-btns button:disabled { opacity: 0.35; cursor: default; }
+  .row-reorder-btns button:not(:disabled):hover { background: var(--accent-dim); color: var(--accent); }
+  .song-entry-row-head .remove-row-btn { margin-left: auto; }
 
   /* Image chart pages + chord tagging */
   .chart-page-wrap { position: relative; display: block; line-height: 0; margin-bottom: 18px; }
@@ -416,6 +426,8 @@
             <th class="sortable" data-sort="artist">Artist<span class="sort-arrow"></span></th>
             <th class="sortable" data-sort="defaultKey">Default Key<span class="sort-arrow"></span></th>
             <th class="sortable" data-sort="ledBy">Led By<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="songType">Song Type<span class="sort-arrow"></span></th>
+            <th class="sortable" data-sort="year">Year<span class="sort-arrow"></span></th>
             <th class="sortable" data-sort="tags">Tags<span class="sort-arrow"></span></th>
             <th class="sortable" data-sort="lastUsed">Last Used<span class="sort-arrow"></span></th>
             <th class="actions-col editor-only"></th>
@@ -552,6 +564,7 @@
         <div class="artist" id="setlistSubtitle"></div>
       </div>
       <div class="row">
+        <button class="icon-btn" id="btnRefreshSetlist" title="Reload this set (picks up changes made elsewhere)">&#8635;</button>
         <button class="btn small" id="btnExportSetlistPdf">Export PDF</button>
       </div>
     </div>
@@ -720,6 +733,7 @@
       renderLibrary();
       renderTracker();
       if (state.tab === "song" && state.songId) renderSongView();
+      if (state.tab === "setlist" && state.setlistId) refreshSetlistView();
     }).catch(function (e) {
       $("capBanner").hidden = false;
       $("capBanner").textContent = "Can't reach the server (" + e.message + "). Check DATABASE_URL and reload.";
@@ -1104,6 +1118,8 @@
         "<td>" + (s.artist ? esc(s.artist) : "") + "</td>" +
         "<td>" + (s.defaultKey ? '<span class="chip key">' + esc(s.defaultKey) + "</span>" : "") + "</td>" +
         "<td>" + (s.ledBy ? esc(s.ledBy) : "") + "</td>" +
+        "<td>" + (s.songType ? esc(s.songType) : "") + "</td>" +
+        "<td>" + (s.year ? esc(s.year) : "") + "</td>" +
         '<td class="tags-cell"><div class="chip-row">' +
         (s.tags || []).map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("") +
         "</div></td>" +
@@ -1122,6 +1138,8 @@
       case "artist": return (s.artist || "").toLowerCase();
       case "defaultKey": return (s.defaultKey || "").toLowerCase();
       case "ledBy": return (s.ledBy || "").toLowerCase();
+      case "songType": return (s.songType || "").toLowerCase();
+      case "year": return s.year || "";
       case "tags": return (s.tags || []).join(", ").toLowerCase();
       case "lastUsed": return songStats(s.id).last || "";
       default: return "";
@@ -1186,6 +1204,10 @@
       '<div class="field"><label>Led by</label><input type="text" id="f_ledby" value="' + esc(editing ? editing.ledBy : "") + '" placeholder="e.g. Sarah"></div>' +
       '<div class="field"><label>Tags (comma separated)</label><input type="text" id="f_tags" value="' + esc(editing && editing.tags ? editing.tags.join(", ") : "") + '" placeholder="fast, communion"></div>' +
       "</div>" +
+      '<div class="field-row">' +
+      '<div class="field"><label>Song type</label><input type="text" id="f_songtype" value="' + esc(editing ? editing.songType : "") + '" placeholder="e.g. Hymn, Contemporary, Christmas"></div>' +
+      '<div class="field"><label>Year</label><input type="text" inputmode="numeric" id="f_year" value="' + esc(editing ? editing.year : "") + '" placeholder="e.g. 2015"></div>' +
+      "</div>" +
       '<div class="field"><label>YouTube reference track (optional)</label><input type="url" id="f_youtube" value="' + esc(editing ? editing.youtubeUrl : "") + '" placeholder="https://www.youtube.com/watch?v=..."></div>' +
       '<div class="field"><label>' + (editing ? "Replace chord chart PDF (optional)" : "Chord chart PDF (optional)") + "</label>" +
       '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">Each page is rendered to an image right here in your browser and only that image is saved — the PDF file itself is never uploaded or stored. We\'ll try to find and tag the chords automatically; after saving, you can drag, edit, resize, or remove any of them, and add ones we missed (a scanned/photographed PDF has no text to find, so you\'ll tag it from scratch).</div>' +
@@ -1239,6 +1261,8 @@
     var key = $("f_key").value.trim();
     var ledBy = $("f_ledby").value.trim();
     var tags = $("f_tags").value.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+    var songType = $("f_songtype").value.trim();
+    var year = $("f_year").value.trim();
     var youtubeUrl = $("f_youtube").value.trim();
     var fileInput = $("f_pdf");
     var file = fileInput.files && fileInput.files[0];
@@ -1257,7 +1281,7 @@
     if (!file && !manualEdited && !editing) { msg.textContent = "Please choose a PDF chord chart, or type the lyrics & chords in manually."; return; }
 
     saveBtn.disabled = true;
-    var base = { title: title, artist: artist, defaultKey: key, ledBy: ledBy, tags: tags, youtubeUrl: youtubeUrl };
+    var base = { title: title, artist: artist, defaultKey: key, ledBy: ledBy, tags: tags, songType: songType, year: year, youtubeUrl: youtubeUrl };
 
     function finish(extra, thenOpenTagger) {
       var data = Object.assign({}, base, extra || {});
@@ -1576,18 +1600,37 @@
   }
   $("btnExportSongPdf").addEventListener("click", exportToPdf);
   $("btnExportSetlistPdf").addEventListener("click", exportToPdf);
+  $("btnRefreshSetlist").addEventListener("click", function () {
+    var btn = $("btnRefreshSetlist");
+    btn.disabled = true;
+    // loadAll() already catches its own errors (shows the connection
+    // banner) rather than rejecting, so a plain .then is enough here.
+    loadAll().then(function () {
+      showToast("Set refreshed.");
+      btn.disabled = false;
+    });
+  });
 
   /* ============================== SETLIST VIEW (one Sunday, all songs) ============================== */
   function openSetlist(sundayId) {
     var sun = sundays.find(function (x) { return x.id === sundayId; });
     if (!sun) { setTab("tracker"); return; }
     state.setlistId = sundayId;
+    setTab("setlist");
+    refreshSetlistView();
+  }
+  // Re-reads the current Sunday from the (already-loaded) `sundays` array
+  // and re-renders the set view from it — used both right after opening a
+  // set and by the refresh button/loadAll(), so picking up a change made
+  // elsewhere (another device, another tab) never needs a full page reload.
+  function refreshSetlistView() {
+    var sun = sundays.find(function (x) { return x.id === state.setlistId; });
+    if (!sun) { setTab("tracker"); return; }
     $("setlistTitle").textContent = fmtDate(sun.date);
     var bits = [];
     if (sun.leader) bits.push("Led by " + sun.leader);
     bits.push((sun.songs || []).length + " song" + ((sun.songs || []).length === 1 ? "" : "s"));
     $("setlistSubtitle").textContent = bits.join(" · ");
-    setTab("setlist");
     renderSetlist(sun);
     renderAnnotations(sun);
   }
@@ -2548,6 +2591,14 @@
     entry = entry || {};
     var rid = "r" + uid();
     return '<div class="song-entry-row" data-rid="' + rid + '">' +
+      '<div class="song-entry-row-head">' +
+      '<span class="song-entry-num"></span>' +
+      '<div class="row-reorder-btns">' +
+      '<button type="button" data-moveup="' + rid + '" title="Move up">&#8593;</button>' +
+      '<button type="button" data-movedown="' + rid + '" title="Move down">&#8595;</button>' +
+      "</div>" +
+      '<button type="button" class="remove-row-btn" data-removerow="' + rid + '">Remove song</button>' +
+      "</div>" +
       '<div class="field-row">' +
       '<div class="field" style="flex:2"><label>Song</label><select class="e_song">' + songOptionsHtml(entry.songId) + "</select></div>" +
       '<div class="field"><label>Key</label><input type="text" list="key-options" class="e_key" value="' + esc(entry.key || "") + '"></div>' +
@@ -2556,8 +2607,17 @@
       '<div class="field"><label>Led by</label><input type="text" class="e_leader" value="' + esc(entry.leader || "") + '" placeholder="Name"></div>' +
       '<div class="field"><label>Notes</label><input type="text" class="e_notes" value="' + esc(entry.notes || "") + '" placeholder="optional"></div>' +
       "</div>" +
-      '<button type="button" class="remove-row-btn" data-removerow="' + rid + '">Remove song</button>' +
       "</div>";
+  }
+  // Keeps the "1.", "2.", ... labels current and disables the top row's "up"
+  // / bottom row's "down" button, after any add/remove/reorder.
+  function renumberEntryRows() {
+    var rows = Array.prototype.slice.call($("entriesWrap").querySelectorAll(".song-entry-row"));
+    rows.forEach(function (row, i) {
+      row.querySelector(".song-entry-num").textContent = (i + 1) + ".";
+      row.querySelector("[data-moveup]").disabled = i === 0;
+      row.querySelector("[data-movedown]").disabled = i === rows.length - 1;
+    });
   }
   function openLogSundayModal(opts) {
     var editing = opts.editId ? sundays.find(function (s) { return s.id === opts.editId; }) : null;
@@ -2578,12 +2638,32 @@
       '<button class="btn primary" id="mSave">' + (editing ? "Save changes" : "Save Sunday") + "</button>" +
       "</div></div></div>";
     $("modalRoot").innerHTML = html;
+    renumberEntryRows();
     $("mCancel").onclick = closeModal;
     $("mb").addEventListener("click", function (e) { if (e.target.id === "mb") closeModal(); });
-    $("addRow").onclick = function () { $("entriesWrap").insertAdjacentHTML("beforeend", songEntryRowHtml({})); };
+    $("addRow").onclick = function () { $("entriesWrap").insertAdjacentHTML("beforeend", songEntryRowHtml({})); renumberEntryRows(); };
     $("entriesWrap").addEventListener("click", function (e) {
       var rm = e.target.closest("[data-removerow]");
-      if (rm) { var row = $("entriesWrap").querySelector('[data-rid="' + rm.getAttribute("data-removerow") + '"]'); if (row) row.remove(); }
+      if (rm) {
+        var row = $("entriesWrap").querySelector('[data-rid="' + rm.getAttribute("data-removerow") + '"]');
+        if (row) row.remove();
+        renumberEntryRows();
+        return;
+      }
+      var up = e.target.closest("[data-moveup]");
+      if (up && !up.disabled) {
+        var upRow = $("entriesWrap").querySelector('[data-rid="' + up.getAttribute("data-moveup") + '"]');
+        if (upRow && upRow.previousElementSibling) upRow.parentNode.insertBefore(upRow, upRow.previousElementSibling);
+        renumberEntryRows();
+        return;
+      }
+      var down = e.target.closest("[data-movedown]");
+      if (down && !down.disabled) {
+        var downRow = $("entriesWrap").querySelector('[data-rid="' + down.getAttribute("data-movedown") + '"]');
+        if (downRow && downRow.nextElementSibling) downRow.parentNode.insertBefore(downRow.nextElementSibling, downRow);
+        renumberEntryRows();
+        return;
+      }
     });
     $("entriesWrap").addEventListener("change", function (e) {
       if (e.target.classList.contains("e_song")) {
