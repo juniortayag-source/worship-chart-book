@@ -150,7 +150,6 @@
   .song-table tbody tr:hover { background: var(--surface-2); }
   .song-table td.title-cell { font-weight: 600; cursor: pointer; }
   .song-table td.title-cell:hover { color: var(--accent); }
-  .song-table td.tags-cell .chip-row { margin-top: 0; }
   .song-table th.actions-col, .song-table td.actions-cell { width: 1%; white-space: nowrap; text-align: right; }
   .song-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
@@ -336,6 +335,16 @@
   .anno-arrow-svg { position: absolute; pointer-events: none; overflow: visible; }
   .anno-arrow-svg .anno-arrow-hit { stroke: transparent; stroke-width: 18; pointer-events: stroke; cursor: grab; }
   .anno-arrow-svg .anno-arrow-hit:active { cursor: grabbing; }
+  .anno-draw-svg { position: absolute; pointer-events: none; overflow: visible; }
+  .anno-draw-svg .anno-draw-hit { stroke: transparent; stroke-width: 18; pointer-events: stroke; cursor: grab; }
+  .anno-draw-svg .anno-draw-hit:active { cursor: grabbing; }
+  /* Transparent full-canvas layer that only intercepts pointer events while
+     the freehand Draw tool is on, so a drag anywhere on the set becomes a
+     pencil stroke instead of scrolling or moving another annotation. */
+  .anno-draw-capture { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 6; pointer-events: none; touch-action: none; }
+  .anno-draw-capture.active { pointer-events: auto; cursor: crosshair; }
+  .anno-draw-preview-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  #annoAddDraw.active { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
 
   /* Setlist (all songs for one Sunday, one scrollable page) */
   .setlist-song-block { margin-bottom: 0; }
@@ -384,7 +393,7 @@
     /* The annotations themselves (notes, shapes, arrows) print along with
        the set, since that's the point — but the drag/resize/delete handles
        are only useful on screen. */
-    .anno-resize-handle, .anno-arrow-handle, .anno-arrow-svg .anno-arrow-hit, .anno-delete { display: none !important; }
+    .anno-resize-handle, .anno-arrow-handle, .anno-arrow-svg .anno-arrow-hit, .anno-draw-svg .anno-draw-hit, .anno-draw-capture, .anno-delete { display: none !important; }
   }
 </style>
 </head>
@@ -418,11 +427,11 @@
   <!-- LIBRARY VIEW -->
   <div id="view-library">
     <div class="row" style="margin-bottom:14px;">
-      <input type="search" class="searchbar" id="librarySearch" placeholder="Search title, artist or tag…">
+      <input type="search" class="searchbar" id="librarySearch" placeholder="Search title, artist, key, led by, type, year…">
       <div class="spacer"></div>
       <div class="view-toggle" role="group" aria-label="Library view">
-        <button type="button" id="btnViewGrid" aria-pressed="true">Grid</button>
-        <button type="button" id="btnViewList" aria-pressed="false">List</button>
+        <button type="button" id="btnViewGrid" aria-pressed="false">Grid</button>
+        <button type="button" id="btnViewList" aria-pressed="true">List</button>
       </div>
       <button class="btn primary editor-only" id="btnAddSong">+ Add song</button>
     </div>
@@ -437,7 +446,6 @@
             <th class="sortable" data-sort="ledBy">Led By<span class="sort-arrow"></span></th>
             <th class="sortable" data-sort="songType">Song Type<span class="sort-arrow"></span></th>
             <th class="sortable" data-sort="year">Year<span class="sort-arrow"></span></th>
-            <th class="sortable" data-sort="tags">Tags<span class="sort-arrow"></span></th>
             <th class="sortable" data-sort="lastUsed">Last Used<span class="sort-arrow"></span></th>
             <th class="actions-col editor-only"></th>
           </tr>
@@ -585,11 +593,15 @@
         <button class="btn small" id="annoAddRect">+ Rectangle</button>
         <button class="btn small" id="annoAddCircle">+ Circle</button>
         <button class="btn small" id="annoAddArrow">+ Arrow</button>
+        <button class="btn small" id="annoAddDraw" title="Drag anywhere on the set to draw; click again to stop">+ Draw</button>
       </div>
     </div>
     <div id="setlistCanvas" class="setlist-canvas">
       <div id="setlistBody"></div>
       <div id="annotationLayer" class="annotation-layer"></div>
+      <div id="annoDrawCapture" class="anno-draw-capture">
+        <svg class="anno-draw-preview-svg"><path id="annoDrawPreviewPath" fill="none" stroke="var(--chord)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </div>
     </div>
   </div>
 
@@ -718,9 +730,9 @@
   function loadLibraryViewPref() {
     try {
       var v = localStorage.getItem("libraryView");
-      return v === "list" ? "list" : "grid";
+      return v === "grid" ? "grid" : "list";
     } catch (e) {
-      return "grid";
+      return "list";
     }
   }
   var state = { tab: "library", songId: null, transpose: 0, fontSize: 16, autoscroll: false, scrollTimer: null, libraryView: loadLibraryViewPref(), librarySort: { col: "title", dir: "asc" } };
@@ -1119,7 +1131,12 @@
     var q = ($("librarySearch").value || "").toLowerCase().trim();
     var filtered = songs.filter(function (s) {
       if (!q) return true;
-      var hay = [s.title, s.artist, s.ledBy, (s.tags || []).join(" ")].join(" ").toLowerCase();
+      var stats = songStats(s.id);
+      var hay = [
+        s.title, s.artist, s.defaultKey, s.ledBy, s.songType, s.year,
+        (s.tags || []).join(" "),
+        stats.last ? fmtDate(stats.last) : ""
+      ].join(" ").toLowerCase();
       return hay.indexOf(q) !== -1;
     });
     $("libraryEmpty").hidden = songs.length !== 0;
@@ -1160,9 +1177,6 @@
         "<td>" + (s.ledBy ? esc(s.ledBy) : "") + "</td>" +
         "<td>" + (s.songType ? esc(s.songType) : "") + "</td>" +
         "<td>" + (s.year ? esc(s.year) : "") + "</td>" +
-        '<td class="tags-cell"><div class="chip-row">' +
-        (s.tags || []).map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("") +
-        "</div></td>" +
         "<td>" + (stats.last ? esc(fmtDate(stats.last)) : '<span style="color:var(--text-dim);">Never</span>') + "</td>" +
         '<td class="actions-cell editor-only"><div class="menu-wrap">' +
         '<button class="icon-btn" data-menu="' + s.id + '">&#8942;</button>' +
@@ -1180,7 +1194,6 @@
       case "ledBy": return (s.ledBy || "").toLowerCase();
       case "songType": return (s.songType || "").toLowerCase();
       case "year": return s.year || "";
-      case "tags": return (s.tags || []).join(", ").toLowerCase();
       case "lastUsed": return songStats(s.id).last || "";
       default: return "";
     }
@@ -1745,6 +1758,7 @@
     var sun = sundays.find(function (x) { return x.id === sundayId; });
     if (!sun) { setTab("tracker"); return; }
     state.setlistId = sundayId;
+    setDrawMode(false);
     setTab("setlist");
     refreshSetlistView();
   }
@@ -1940,6 +1954,29 @@
     if (els.delBtn) { els.delBtn.style.left = ((a.x1Pct + a.x2Pct) / 2) + "%"; els.delBtn.style.top = ((y1 + y2) / 2) + "px"; }
   }
 
+  // Converts a freehand stroke's percentage-based points into the pixel path
+  // ("d") and bounding box an <svg> needs to show it, the same box-fitting
+  // approach layoutArrow uses for a two-point line.
+  function drawPathBox(points, canvasWidth, canvasHeight) {
+    var pxPts = points.map(function (p) { return { x: (p.xPct / 100) * canvasWidth, y: (p.yPct / 100) * canvasHeight }; });
+    var xs = pxPts.map(function (p) { return p.x; }), ys = pxPts.map(function (p) { return p.y; });
+    var pad = 14;
+    var minX = Math.min.apply(null, xs) - pad, minY = Math.min.apply(null, ys) - pad;
+    var maxX = Math.max.apply(null, xs) + pad, maxY = Math.max.apply(null, ys) + pad;
+    var d = pxPts.map(function (p, i) { return (i === 0 ? "M" : "L") + (p.x - minX) + "," + (p.y - minY); }).join(" ");
+    return { minX: minX, minY: minY, w: maxX - minX, h: maxY - minY, d: d };
+  }
+  // Recomputes a freehand stroke's SVG box/path and delete-button position in
+  // place during a drag, mirroring layoutArrow.
+  function layoutDrawPath(a, els, canvasWidth, canvasHeight) {
+    var box = drawPathBox(a.points, canvasWidth, canvasHeight);
+    els.svg.style.left = box.minX + "px"; els.svg.style.top = box.minY + "px";
+    els.svg.style.width = box.w + "px"; els.svg.style.height = box.h + "px";
+    els.svg.setAttribute("width", box.w); els.svg.setAttribute("height", box.h);
+    els.hit.setAttribute("d", box.d); els.line.setAttribute("d", box.d);
+    if (els.delBtn) { els.delBtn.style.left = a.points[0].xPct + "%"; els.delBtn.style.top = ((a.points[0].yPct / 100) * canvasHeight) + "px"; }
+  }
+
   function renderAnnotations(sun) {
     var layer = $("annotationLayer");
     var list = sun.annotations || [];
@@ -1990,6 +2027,16 @@
           '<div class="anno-arrow-handle editor-only" data-endpoint="' + a.id + ':1" style="left:' + a.x1Pct + '%;top:' + y1 + 'px;"></div>' +
           '<div class="anno-arrow-handle editor-only" data-endpoint="' + a.id + ':2" style="left:' + a.x2Pct + '%;top:' + y2 + 'px;"></div>' +
           '<button class="anno-delete standalone editor-only" data-del="' + a.id + '" title="Remove" style="left:' + ((a.x1Pct + a.x2Pct) / 2) + '%;top:' + ((y1 + y2) / 2) + 'px;">&times;</button>';
+      }
+      if (a.type === "draw") {
+        var dPts = a.points || [];
+        if (dPts.length < 2) return "";
+        var box = drawPathBox(dPts, canvasWidth, canvasHeight);
+        return '<svg class="anno-draw-svg" data-annoid="' + a.id + '" style="left:' + box.minX + 'px;top:' + box.minY + 'px;width:' + box.w + 'px;height:' + box.h + 'px;" width="' + box.w + '" height="' + box.h + '">' +
+          '<path class="anno-draw-hit" d="' + box.d + '" fill="none"></path>' +
+          '<path class="anno-draw-line" d="' + box.d + '" fill="none" stroke="var(--chord)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>' +
+          "</svg>" +
+          '<button class="anno-delete standalone editor-only" data-del="' + a.id + '" title="Remove" style="left:' + dPts[0].xPct + '%;top:' + ((dPts[0].yPct / 100) * canvasHeight) + 'px;">&times;</button>';
       }
       return "";
     }).join("");
@@ -2174,12 +2221,97 @@
         });
       });
     });
+
+    Array.prototype.forEach.call(layer.querySelectorAll(".anno-draw-svg"), function (svgEl) {
+      var id = svgEl.getAttribute("data-annoid");
+      var a = (sun.annotations || []).find(function (x) { return x.id === id; });
+      if (!a) return;
+      var els = {
+        svg: svgEl,
+        hit: svgEl.querySelector(".anno-draw-hit"),
+        line: svgEl.querySelector(".anno-draw-line"),
+        delBtn: layer.querySelector('.anno-delete[data-del="' + id + '"].standalone'),
+      };
+      var startPts;
+      startDrag(els.hit, function (dx, dy, rect) {
+        var dxPct = (dx / rect.width) * 100, dyPct = (dy / rect.height) * 100;
+        a.points = startPts.map(function (p) { return { xPct: p.xPct + dxPct, yPct: p.yPct + dyPct }; });
+        layoutDrawPath(a, els, rect.width, rect.height);
+      }, function () { saveAnnotations(sun); });
+      els.hit.addEventListener("pointerdown", function () {
+        startPts = a.points.map(function (p) { return { xPct: p.xPct, yPct: p.yPct }; });
+      });
+    });
   }
 
   $("annoAddNote").addEventListener("click", addNoteAnnotation);
   $("annoAddRect").addEventListener("click", function () { addShapeAnnotation("rect"); });
   $("annoAddCircle").addEventListener("click", function () { addShapeAnnotation("circle"); });
   $("annoAddArrow").addEventListener("click", addArrowAnnotation);
+
+  // Freehand "+ Draw" tool: toggled on/off (rather than one-shot like the
+  // other add buttons) because a pencil stroke needs a drag gesture, not a
+  // click. While on, a transparent capture layer sits above everything else
+  // in the set so a drag anywhere becomes a stroke instead of a scroll or a
+  // drag of some other annotation; each pointerup commits the stroke drawn
+  // so far as a new annotation and the tool stays armed for the next one.
+  var annoDrawState = { active: false, drawing: false, pts: [] };
+  function setDrawMode(on) {
+    annoDrawState.active = !!on;
+    annoDrawState.drawing = false;
+    annoDrawState.pts = [];
+    $("annoAddDraw").classList.toggle("active", annoDrawState.active);
+    $("annoDrawCapture").classList.toggle("active", annoDrawState.active);
+    $("annoDrawPreviewPath").setAttribute("d", "");
+  }
+  function updateDrawPreview(rect) {
+    var d = annoDrawState.pts.map(function (p, i) {
+      var x = (p.xPct / 100) * rect.width, y = (p.yPct / 100) * rect.height;
+      return (i === 0 ? "M" : "L") + x + "," + y;
+    }).join(" ");
+    $("annoDrawPreviewPath").setAttribute("d", d);
+  }
+  $("annoAddDraw").addEventListener("click", function () { setDrawMode(!annoDrawState.active); });
+  $("annoDrawCapture").addEventListener("pointerdown", function (e) {
+    if (!annoDrawState.active || state.role !== "editor") return;
+    if (e.button !== undefined && e.button !== 0) return;
+    var rect = $("setlistCanvas").getBoundingClientRect();
+    annoDrawState.drawing = true;
+    annoDrawState.pts = [{ xPct: ((e.clientX - rect.left) / rect.width) * 100, yPct: ((e.clientY - rect.top) / rect.height) * 100 }];
+    try { $("annoDrawCapture").setPointerCapture(e.pointerId); } catch (err) {}
+    updateDrawPreview(rect);
+  });
+  $("annoDrawCapture").addEventListener("pointermove", function (e) {
+    if (!annoDrawState.drawing) return;
+    var rect = $("setlistCanvas").getBoundingClientRect();
+    var xPct = ((e.clientX - rect.left) / rect.width) * 100, yPct = ((e.clientY - rect.top) / rect.height) * 100;
+    var last = annoDrawState.pts[annoDrawState.pts.length - 1];
+    if (Math.abs(xPct - last.xPct) * rect.width / 100 > 2 || Math.abs(yPct - last.yPct) * rect.height / 100 > 2) {
+      annoDrawState.pts.push({ xPct: xPct, yPct: yPct });
+    }
+    updateDrawPreview(rect);
+  });
+  function finishDrawStroke() {
+    if (!annoDrawState.drawing) return;
+    annoDrawState.drawing = false;
+    $("annoDrawPreviewPath").setAttribute("d", "");
+    if (annoDrawState.pts.length > 1) {
+      var sun = currentSetlistSunday();
+      if (sun) {
+        sun.annotations = sun.annotations || [];
+        sun.annotations.push({ id: uid(), type: "draw", points: annoDrawState.pts });
+        renderAnnotations(sun);
+        saveAnnotations(sun);
+      }
+    }
+    annoDrawState.pts = [];
+  }
+  $("annoDrawCapture").addEventListener("pointerup", finishDrawStroke);
+  $("annoDrawCapture").addEventListener("pointercancel", finishDrawStroke);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && annoDrawState.active) setDrawMode(false);
+  });
+
   $("annotationLayer").addEventListener("click", function (e) {
     var delBtn = e.target.closest("[data-del]");
     if (!delBtn) return;
@@ -2191,7 +2323,7 @@
     saveAnnotations(sun);
   });
 
-  $("btnBackFromSetlist").addEventListener("click", function () { setTab("tracker"); });
+  $("btnBackFromSetlist").addEventListener("click", function () { setDrawMode(false); setTab("tracker"); });
 
   $("transUp").addEventListener("click", function () { state.transpose++; renderSongView(); });
   $("transDown").addEventListener("click", function () { state.transpose--; renderSongView(); });
