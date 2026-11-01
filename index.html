@@ -264,6 +264,15 @@
   .row-reorder-btns button:disabled { opacity: 0.35; cursor: default; }
   .row-reorder-btns button:not(:disabled):hover { background: var(--accent-dim); color: var(--accent); }
   .song-entry-row-head .remove-row-btn { margin-left: auto; }
+  .variant-row {
+    display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 10px; margin-bottom: 6px; background: var(--surface-2);
+  }
+  .variant-row .meta-line { color: var(--text-dim); font-size: 0.78rem; }
+  .variant-row .remove-row-btn { margin-left: auto; }
+  .variant-add-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+  .variant-add-row input[type="text"] { max-width: 110px; }
+  .variant-add-row input[type="file"] { flex: 1; min-width: 160px; font-size: 0.8rem; }
 
   /* Image chart pages + chord tagging */
   .chart-page-wrap { position: relative; display: block; line-height: 0; margin-bottom: 18px; }
@@ -671,6 +680,36 @@
     var diff = ((b - a) % 12 + 12) % 12;
     if (diff > 6) diff -= 12;
     return diff;
+  }
+
+  // A song can have its default chart plus any number of "other key
+  // versions" (real charts uploaded for other keys — see "Add another key"
+  // in the song editor), so the same song in two keys is one library entry,
+  // not two. This picks which uploaded version to actually render for a
+  // given target key: an exact (or enharmonic) match if one was uploaded,
+  // otherwise whichever uploaded version is closest in key, with the
+  // remaining distance made up by ordinary transposition.
+  function chartSources(song) {
+    var list = [{ key: song.defaultKey, variantKey: null, sourceType: song.sourceType, pages: song.pages, chart: song.chart, parseFailed: song.parseFailed }];
+    (song.variants || []).forEach(function (v) {
+      list.push({ key: v.key, variantKey: v.key, sourceType: v.sourceType, pages: v.pages, chart: v.chart, parseFailed: v.parseFailed });
+    });
+    return list;
+  }
+  function resolveChartSource(song, targetKey) {
+    var sources = chartSources(song);
+    var targetRoot = keyRootIndex(targetKey);
+    if (targetRoot == null) {
+      return { sourceType: sources[0].sourceType, pages: sources[0].pages, chart: sources[0].chart, parseFailed: sources[0].parseFailed, variantKey: sources[0].variantKey, semitones: 0 };
+    }
+    var best = null, bestDist = Infinity;
+    sources.forEach(function (src) {
+      if (keyRootIndex(src.key) == null) return;
+      var dist = Math.abs(semitoneDiff(src.key, targetKey));
+      if (dist < bestDist) { bestDist = dist; best = src; }
+    });
+    if (!best) best = sources[0];
+    return { sourceType: best.sourceType, pages: best.pages, chart: best.chart, parseFailed: best.parseFailed, variantKey: best.variantKey, semitones: semitoneDiff(best.key, targetKey) };
   }
 
   /* ============================== APP STATE ============================== */
@@ -1222,6 +1261,17 @@
       "</div>" +
       '<textarea id="f_chartText" style="min-height:180px;font-family:var(--font-mono);font-size:0.85rem;line-height:1.6;" placeholder="Verse 1\n[G]Amazing [C]grace how [G]sweet the sound">' + esc(existingChartText) + "</textarea>" +
       "</div>" +
+      '<div class="field">' +
+      '<label>Other key versions (optional)</label>' +
+      '<div style="font-size:0.78rem;color:var(--text-dim);margin:-2px 0 6px;">Already have this song\'s real chart in another key (not just a mathematically-transposed one)? Upload it here as its own PDF. When that exact key is picked — in this song\'s view or in a Sunday\'s set — this version is used directly, so the song still shows up as one library entry instead of two.</div>' +
+      '<div id="variantsList"></div>' +
+      '<div class="variant-add-row">' +
+      '<input type="text" list="key-options" id="variantKeyInput" placeholder="Key, e.g. C">' +
+      '<input type="file" id="variantPdfInput" accept="application/pdf,.pdf">' +
+      '<button type="button" class="btn ghost small" id="variantAddBtn">+ Add this key</button>' +
+      "</div>" +
+      '<div id="variantMsg" style="font-size:0.78rem;color:var(--text-dim);min-height:16px;"></div>' +
+      "</div>" +
       '<div id="modalMsg" style="font-size:0.82rem;color:var(--text-dim);min-height:18px;"></div>' +
       '<div class="modal-actions">' +
       '<button class="btn ghost" id="mCancel">Cancel</button>' +
@@ -1230,7 +1280,51 @@
     $("modalRoot").innerHTML = html;
     $("mCancel").onclick = closeModal;
     $("mb").addEventListener("click", function (e) { if (e.target.id === "mb") closeModal(); });
-    $("mSave").onclick = function () { saveSongModal(editing); };
+
+    // Local working copy of this song's other key versions — edited here,
+    // then sent along with everything else only when "Save" is pressed.
+    var modalVariants = editing && editing.variants ? JSON.parse(JSON.stringify(editing.variants)) : [];
+    function renderVariantsList() {
+      var wrap = $("variantsList");
+      if (!modalVariants.length) { wrap.innerHTML = '<div class="meta-line">No other key versions yet.</div>'; return; }
+      wrap.innerHTML = modalVariants.map(function (v, i) {
+        var pageCount = v.pageCount || (v.pages || []).length;
+        return '<div class="variant-row"><span class="chip key">' + esc(v.key) + "</span>" +
+          '<span class="meta-line" style="margin:0;">' + pageCount + " page" + (pageCount === 1 ? "" : "s") + "</span>" +
+          '<button type="button" class="remove-row-btn" data-removevariant="' + i + '">Remove</button></div>';
+      }).join("");
+    }
+    renderVariantsList();
+    $("variantsList").addEventListener("click", function (e) {
+      var rm = e.target.closest("[data-removevariant]");
+      if (!rm) return;
+      modalVariants.splice(parseInt(rm.getAttribute("data-removevariant"), 10), 1);
+      renderVariantsList();
+    });
+    $("variantAddBtn").onclick = function () {
+      var key = $("variantKeyInput").value.trim();
+      var file = $("variantPdfInput").files && $("variantPdfInput").files[0];
+      var vMsg = $("variantMsg");
+      if (!key) { vMsg.textContent = "Enter the key for this version."; return; }
+      if (modalVariants.some(function (v) { return v.key.toLowerCase() === key.toLowerCase(); }) || key.toLowerCase() === ($("f_key").value || "").trim().toLowerCase()) {
+        vMsg.textContent = "This song already has a version in that key."; return;
+      }
+      if (!file) { vMsg.textContent = "Choose a PDF for this key."; return; }
+      $("variantAddBtn").disabled = true;
+      processPdfToPages(file, function (t) { vMsg.textContent = t; }).then(function (result) {
+        modalVariants.push({ key: key, sourceType: "image", pages: result.pages, pageCount: result.pageCount, parseFailed: false });
+        $("variantKeyInput").value = "";
+        $("variantPdfInput").value = "";
+        vMsg.textContent = "";
+        $("variantAddBtn").disabled = false;
+        renderVariantsList();
+      }).catch(function (e) {
+        vMsg.textContent = "Couldn't read that PDF (" + e.message + ").";
+        $("variantAddBtn").disabled = false;
+      });
+    };
+
+    $("mSave").onclick = function () { saveSongModal(editing, modalVariants); };
   }
   function closeModal() { $("modalRoot").innerHTML = ""; }
 
@@ -1255,7 +1349,7 @@
     $("mConfirm").onclick = function () { closeModal(); onConfirm(); };
   }
 
-  function saveSongModal(editing) {
+  function saveSongModal(editing, variants) {
     var title = $("f_title").value.trim();
     if (!title) { $("modalMsg").textContent = "Please enter a title."; return; }
     var artist = $("f_artist").value.trim();
@@ -1282,7 +1376,7 @@
     if (!file && !manualEdited && !editing) { msg.textContent = "Please choose a PDF chord chart, or type the lyrics & chords in manually."; return; }
 
     saveBtn.disabled = true;
-    var base = { title: title, artist: artist, defaultKey: key, ledBy: ledBy, tags: tags, songType: songType, year: year, youtubeUrl: youtubeUrl };
+    var base = { title: title, artist: artist, defaultKey: key, ledBy: ledBy, tags: tags, songType: songType, year: year, youtubeUrl: youtubeUrl, variants: variants || [] };
 
     function finish(extra, thenOpenTagger) {
       var data = Object.assign({}, base, extra || {});
@@ -1382,11 +1476,18 @@
     document.documentElement.style.setProperty("--chart-font-size", state.fontSize + "px");
 
     $("bpmVal").textContent = state.metroBpm;
-    $("btnEditChords").hidden = s.sourceType !== "image";
-    $("view-song").classList.toggle("is-image-source", s.sourceType === "image");
+
+    // Picks whichever uploaded version (default, or one of this song's other
+    // key versions) is actually correct — or closest — for the key currently
+    // shown, so "Edit chords" and the chart itself always agree.
+    var resolved = resolveChartSource(s, shownKey || "");
+    state.currentSongVariantKey = resolved.variantKey;
+    var isImageSong = resolved.sourceType === "image" && resolved.pages && resolved.pages.length;
+    $("btnEditChords").hidden = !isImageSong;
+    $("view-song").classList.toggle("is-image-source", !!isImageSong);
 
     var note = $("parseNote");
-    if (s.parseFailed) {
+    if (resolved.parseFailed) {
       note.hidden = false;
       note.textContent = "We couldn't automatically read this chart. Try re-uploading a text-based PDF, or type it in with “Edit song”.";
     } else {
@@ -1394,10 +1495,10 @@
     }
 
     var box = $("chartBox");
-    if (s.sourceType === "image" && s.pages && s.pages.length) {
-      box.innerHTML = renderImagePages(s.pages, state.transpose, preferFlats);
-    } else if (s.chart && s.chart.length) {
-      box.innerHTML = renderChartLines(s.chart, state.transpose, preferFlats);
+    if (isImageSong) {
+      box.innerHTML = renderImagePages(resolved.pages, resolved.semitones, preferFlats);
+    } else if (resolved.chart && resolved.chart.length) {
+      box.innerHTML = renderChartLines(resolved.chart, resolved.semitones, preferFlats);
     } else {
       box.innerHTML = '<div class="meta-line">No chart to show yet.</div>';
     }
@@ -1422,19 +1523,32 @@
     }).join("");
   }
 
-  $("btnEditChords").addEventListener("click", function () { if (state.songId) openTagger(state.songId); });
+  $("btnEditChords").addEventListener("click", function () { if (state.songId) openTagger(state.songId, state.currentSongVariantKey); });
 
   /* ============================== CHORD TAGGER ============================== */
   // Lets you tap chords directly on a rendered page image so transposing can
   // update them. Works on a local copy of the song's pages until "Done
   // tagging" saves it back.
-  var tagger = null; // { songId, pages, pageIndex }
+  var tagger = null; // { songId, variantKey, pages, pageIndex }
 
-  function openTagger(songId) {
+  // variantKey identifies one of the song's "other key versions" (see "Add
+  // another key" in the song editor) to tag instead of the default chart —
+  // whichever one is actually on screen, so "Edit chords" always edits what
+  // you're looking at.
+  function openTagger(songId, variantKey) {
     var s = songs.find(function (x) { return x.id === songId; });
-    if (!s || !s.pages || !s.pages.length) { showToast("No page images to tag yet.", true); return; }
-    tagger = { songId: songId, pages: JSON.parse(JSON.stringify(s.pages)), pageIndex: 0 };
-    $("taggerTitle").textContent = s.title || "Untitled";
+    if (!s) { showToast("Song not found.", true); return; }
+    var pagesSrc;
+    if (variantKey) {
+      var v = (s.variants || []).find(function (x) { return x.key === variantKey; });
+      if (!v || !v.pages || !v.pages.length) { showToast("No page images to tag yet.", true); return; }
+      pagesSrc = v.pages;
+    } else {
+      if (!s.pages || !s.pages.length) { showToast("No page images to tag yet.", true); return; }
+      pagesSrc = s.pages;
+    }
+    tagger = { songId: songId, variantKey: variantKey || null, pages: JSON.parse(JSON.stringify(pagesSrc)), pageIndex: 0 };
+    $("taggerTitle").textContent = (s.title || "Untitled") + (variantKey ? " (Key " + variantKey + ")" : "");
     setTab("tagger");
     renderTaggerPage();
   }
@@ -1577,9 +1691,20 @@
   });
   $("btnTaggerDone").addEventListener("click", function () {
     if (!tagger) { setTab("library"); return; }
-    var sid = tagger.songId, pages = tagger.pages;
+    var sid = tagger.songId, pages = tagger.pages, variantKey = tagger.variantKey;
+    var patchBody;
+    if (variantKey) {
+      var s = songs.find(function (x) { return x.id === sid; });
+      var variants = (s && s.variants ? s.variants : []).map(function (v) { return Object.assign({}, v); });
+      var idx = variants.findIndex(function (v) { return v.key === variantKey; });
+      if (idx === -1) { showToast("That key version no longer exists.", true); return; }
+      variants[idx].pages = pages;
+      patchBody = { variants: variants };
+    } else {
+      patchBody = { pages: pages };
+    }
     $("btnTaggerDone").disabled = true;
-    apiFetch("PATCH", "/api/songs/" + sid, { pages: pages }).then(function () { return loadAll(); })
+    apiFetch("PATCH", "/api/songs/" + sid, patchBody).then(function () { return loadAll(); })
       .then(function () {
         tagger = null;
         $("btnTaggerDone").disabled = false;
@@ -1647,7 +1772,8 @@
     }
     body.innerHTML = sun.songs.map(function (entry) {
       var song = songs.find(function (s) { return s.id === entry.songId; });
-      var isImageSong = !!(song && song.sourceType === "image" && song.pages && song.pages.length);
+      var resolved = song ? resolveChartSource(song, entry.key || "") : null;
+      var isImageSong = !!(resolved && resolved.sourceType === "image" && resolved.pages && resolved.pages.length);
       var titleHtml = "<h3>" + esc(entry.title || (song ? song.title : "Untitled")) + "</h3>";
       var metaBits = [];
       if (entry.key) metaBits.push("Key " + esc(entry.key));
@@ -1658,12 +1784,11 @@
       if (!song) {
         chartHtml = '<div class="meta-line">This song is no longer in your library.</div>';
       } else {
-        var semitones = entry.key ? semitoneDiff(song.defaultKey, entry.key) : 0;
         var preferFlats = keyPrefersFlats(entry.key || song.defaultKey);
         if (isImageSong) {
-          chartHtml = renderImagePages(song.pages, semitones, preferFlats);
-        } else if (song.chart && song.chart.length) {
-          chartHtml = renderChartLines(song.chart, semitones, preferFlats);
+          chartHtml = renderImagePages(resolved.pages, resolved.semitones, preferFlats);
+        } else if (resolved.chart && resolved.chart.length) {
+          chartHtml = renderChartLines(resolved.chart, resolved.semitones, preferFlats);
         } else {
           chartHtml = '<div class="meta-line">No chart to show yet.</div>';
         }

@@ -15,4 +15,16 @@ function pageUrls(pages) {
   return (pages || []).map(function (p) { return p && p.url; }).filter(Boolean);
 }
 
-module.exports = { deleteBlobs: deleteBlobs, pageUrls: pageUrls };
+// Same as pageUrls, but also sweeps in the page images of every "other key
+// version" attached to a song (see "Add another key" in the song editor),
+// so deleting a song or replacing/removing one of its key versions cleans
+// up every image it owns, not just the default chart's.
+function allPageUrls(doc) {
+  var urls = pageUrls(doc && doc.pages);
+  (doc && doc.variants || []).forEach(function (v) {
+    urls = urls.concat(pageUrls(v && v.pages));
+  });
+  return urls;
+}
+
+module.exports = { deleteBlobs: deleteBlobs, pageUrls: pageUrls, allPageUrls: allPageUrls };

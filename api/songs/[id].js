@@ -1,5 +1,5 @@
 const { getPool, rowToDoc } = require("../_db");
-const { deleteBlobs, pageUrls } = require("../_blob");
+const { deleteBlobs, allPageUrls } = require("../_blob");
 const { requireEditor } = require("../_auth");
 
 module.exports = async (req, res) => {
@@ -21,11 +21,14 @@ module.exports = async (req, res) => {
       const existing = rows[0].data;
       const merged = Object.assign({}, existing, req.body, { updatedAt: new Date().toISOString() });
       await pool.query("UPDATE songs SET data = $2::jsonb WHERE id = $1", [id, JSON.stringify(merged)]);
-      // If this update replaced the page images (a PDF re-upload, or tags
-      // saved from the chord tagger), clean up any blobs no longer used.
-      if (Object.prototype.hasOwnProperty.call(req.body, "pages")) {
-        const oldUrls = pageUrls(existing.pages);
-        const newUrls = new Set(pageUrls(merged.pages));
+      // If this update replaced the page images — a PDF re-upload, tags
+      // saved from the chord tagger (default chart or one of this song's
+      // other key versions), or a key version added/removed/replaced in the
+      // song editor — clean up any blobs no longer used by either the
+      // default chart or any key version.
+      if (Object.prototype.hasOwnProperty.call(req.body, "pages") || Object.prototype.hasOwnProperty.call(req.body, "variants")) {
+        const oldUrls = allPageUrls(existing);
+        const newUrls = new Set(allPageUrls(merged));
         const orphaned = oldUrls.filter(function (u) { return !newUrls.has(u); });
         await deleteBlobs(orphaned);
       }
@@ -37,7 +40,7 @@ module.exports = async (req, res) => {
       if (!requireEditor(req, res)) return;
       const { rows } = await pool.query("SELECT data FROM songs WHERE id = $1", [id]);
       await pool.query("DELETE FROM songs WHERE id = $1", [id]);
-      if (rows.length) await deleteBlobs(pageUrls(rows[0].data && rows[0].data.pages));
+      if (rows.length) await deleteBlobs(allPageUrls(rows[0].data));
       res.status(200).json({ ok: true });
       return;
     }
