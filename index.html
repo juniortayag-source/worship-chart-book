@@ -417,7 +417,7 @@
   <div class="login-card">
     <div class="login-brand">
       <span class="mark">&#9834;</span>
-      <h1>MFBC Worship Team</h1>
+      <h1>Worship Team</h1>
       <div class="subtitle">Mississauga Family Baptist Church</div>
     </div>
     <div class="field">
@@ -688,6 +688,18 @@
     if (!tok) return false;
     if (CHORD_TOKEN_ALLOW[tok]) return true;
     return CHORD_RE.test(tok);
+  }
+  // Same check, but used only when auto-detecting chords from a PDF's text
+  // layer (see detectChordTags below) — a bare "-" there is almost always a
+  // stray hyphen/dash in the PDF (a hyphenated word, a page number like
+  // "- 1 -", a bullet) rather than someone's "hold the previous chord"
+  // notation, and was getting auto-tagged on nearly every chart. It's still
+  // recognized everywhere else (typed by hand, or tagged manually in the
+  // tagger), including by transposeChord, which still needs to leave a "-"
+  // untouched instead of trying to transpose it.
+  function isAutoDetectableChordToken(tok) {
+    if (tok === "-") return false;
+    return isChordToken(tok);
   }
   var HEADER_RE = /^\[?(verse|chorus|bridge|pre-?chorus|intro|outro|tag|ending|interlude|refrain|vamp)\b.*\]?$/i;
   function isHeaderLine(text) { return HEADER_RE.test(text.trim()) && text.trim().length < 40; }
@@ -991,8 +1003,8 @@
   }
 
   // Pre-fills chord tags by scanning the PDF's own text layer for tokens
-  // that look like chords (reusing the same isChordToken check transposition
-  // uses), and converting each one's PDF-space position into the xPct/yPct
+  // that look like chords (isAutoDetectableChordToken above), and converting
+  // each one's PDF-space position into the xPct/yPct
   // coordinates tags use on the rendered image. This only works when the
   // PDF has real text in it — a scanned/photographed chart has no text
   // layer, so it comes back empty and tagging just starts from scratch, as
@@ -1018,7 +1030,7 @@
           var start = idx;
           while (idx < str.length && str[idx] !== " ") idx++;
           var word = str.slice(start, idx);
-          if (isChordToken(word)) {
+          if (isAutoDetectableChordToken(word)) {
             var wordX = x0 + start * charW;
             var adjY = y0 + fontSize * 0.32; // nudge up from the text baseline toward the glyph's visual center
             tags.push({
