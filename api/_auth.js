@@ -18,13 +18,20 @@
 // changes (Katrina -> Katreena below), the `id` stays put and only `name`
 // changes, which keeps that person's existing notes attached to their
 // account instead of orphaning them under an id nobody logs in as anymore.
+//
+// `isAdmin: true` is what gives an account access to the Activity Log (see
+// api/activity.js) — a record of what every account has done (songs/Sunday
+// sets added, edited, deleted; logins). It's visible only to admin accounts;
+// everyone else never sees it exists. Add `isAdmin: true` to another
+// account's entry (here, or in APP_USERS if you're using that instead) to
+// let more than one person see it.
 var DEFAULT_USERS = [
   { id: "brian", name: "Brian", password: "MFBCworshipteam!!" },
   { id: "cristian", name: "Cristian", password: "MFBCworshipteam!!" },
   { id: "david", name: "David", password: "MFBCworshipteam!!" },
   { id: "janine", name: "Janine", password: "MFBCworshipteam!!" },
   { id: "jayronn", name: "Jayronn", password: "MFBCworshipteam!!" },
-  { id: "junior", name: "Junior", password: "MFBCworshipteam!!" },
+  { id: "junior", name: "Junior", password: "MFBCworshipteam!!", isAdmin: true },
   { id: "katrina", name: "Katreena", password: "MFBCworshipteam!!" },
   { id: "kevin", name: "Kevin", password: "MFBCworshipteam!!" },
   { id: "kirsten", name: "Kirsten", password: "MFBCworshipteam!!" },
@@ -59,9 +66,9 @@ function credsFromAuthHeader(auth) {
   }
 }
 
-// Returns { id, name } for a request carrying valid credentials for one of
-// the accounts above, or null otherwise. Never throws, never challenges —
-// callers that need to enforce login use requireUser below.
+// Returns { id, name, isAdmin } for a request carrying valid credentials for
+// one of the accounts above, or null otherwise. Never throws, never
+// challenges — callers that need to enforce login use requireUser below.
 function userOf(req) {
   var auth = req.headers && (req.headers["authorization"] || req.headers["Authorization"]);
   var creds = credsFromAuthHeader(auth);
@@ -69,7 +76,7 @@ function userOf(req) {
   var match = loadUsers().find(function (u) {
     return u.name.toLowerCase() === creds.name.toLowerCase() && u.password === creds.password;
   });
-  return match ? { id: match.id, name: match.name } : null;
+  return match ? { id: match.id, name: match.name, isAdmin: !!match.isAdmin } : null;
 }
 
 // Returns the logged-in user and lets the request proceed, or sends a 401

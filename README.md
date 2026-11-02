@@ -46,9 +46,11 @@ api/blob-upload.js    receives one rendered page image from the browser and stor
 api/_db.js            shared Postgres connection helper
 api/_blob.js           shared Blob cleanup helper
 api/_auth.js           the worship-team accounts and login check (see "Accounts & login" below)
+api/_activity.js        records one Activity Log entry (called from the routes above)
+api/activity.js         GET the Activity Log — admin accounts only (see "Activity Log" below)
 api/login.js           checks the name/password the login screen submits
 api/whoami.js           confirms a remembered login is still valid on page load
-schema.sql            the two tables to create before first use
+schema.sql            the tables to create before first use
 ```
 
 ## Deploying
@@ -148,7 +150,23 @@ every reload. Each person's notes and drawings on a Sunday's set (the
 Annotate bar: notes, shapes, arrows, and freehand drawing) are private to
 them; everyone sees the same songs, setlists, and chord charts.
 
-### 5. Updating later
+### 5. Activity Log
+
+Junior's account has `isAdmin: true` in `api/_auth.js`, which shows an
+"Activity Log" button in the top bar (hidden for everyone else) listing
+what every account has done — songs and Sunday sets added, edited, or
+deleted, and logins — newest first. Nobody without `isAdmin: true` can see
+it, even by calling the API directly (`api/activity.js` checks this
+server-side, not just in the UI). To give another account the same
+visibility, add `isAdmin: true` to their entry too (in `api/_auth.js`, or in
+`APP_USERS` if you're using that instead).
+
+This is a new table (`activity_log`), so if you already deployed this app
+before this feature existed, re-run `schema.sql` against your database once
+(same as the first-time setup in step 1) — it only adds what's missing, so
+it's safe to run again.
+
+### 6. Updating later
 
 Any time you want to change the app, edit the files and push to GitHub again
 — Vercel redeploys automatically on every push to your main branch.

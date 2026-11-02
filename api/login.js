@@ -1,4 +1,6 @@
+const { getPool } = require("./_db");
 const { userOf } = require("./_auth");
+const { logActivity } = require("./_activity");
 
 // Called by the login screen with the name/password the person just typed,
 // sent as HTTP Basic Auth (so the credential-checking logic stays in one
@@ -13,6 +15,12 @@ module.exports = async (req, res) => {
     res.setHeader("WWW-Authenticate", 'Basic realm="MFBC Worship Team", charset="UTF-8"');
     res.status(401).json({ error: "Incorrect name or password." });
     return;
+  }
+  try {
+    await logActivity(getPool(), user, "logged_in", null);
+  } catch (e) {
+    // Logging is best-effort (and getPool() throws if DATABASE_URL isn't
+    // set yet) — never block a successful login over it.
   }
   res.status(200).json({ user: user });
 };

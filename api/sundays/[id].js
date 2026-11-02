@@ -1,5 +1,16 @@
 const { getPool, rowToDoc } = require("../_db");
 const { requireUser } = require("../_auth");
+const { logActivity } = require("../_activity");
+
+// Spacing drags between songs and each account's own private annotations
+// both auto-save on every little change, so a PATCH carrying only these
+// isn't worth a line in the Activity Log — everything else about a Sunday
+// (its date, leader, song list/order) still gets logged.
+const QUIET_SUNDAY_PATCH_KEYS = { gaps: 1, annotationsByUser: 1 };
+function isQuietSundayPatch(body) {
+  const keys = Object.keys(body || {});
+  return keys.length > 0 && keys.every(function (k) { return QUIET_SUNDAY_PATCH_KEYS[k]; });
+}
 
 module.exports = async (req, res) => {
   let pool;
@@ -32,13 +43,17 @@ module.exports = async (req, res) => {
         if (mine !== undefined) merged.annotationsByUser[user.id] = mine;
       }
       await pool.query("UPDATE sundays SET data = $2::jsonb WHERE id = $1", [id, JSON.stringify(merged)]);
+      if (!isQuietSundayPatch(req.body)) await logActivity(pool, user, "sunday_updated", merged.date || "");
       res.status(200).json(Object.assign({ id: id }, merged));
       return;
     }
 
     if (req.method === "DELETE") {
-      if (!requireUser(req, res)) return;
+      const user = requireUser(req, res);
+      if (!user) return;
+      const { rows } = await pool.query("SELECT data FROM sundays WHERE id = $1", [id]);
       await pool.query("DELETE FROM sundays WHERE id = $1", [id]);
+      await logActivity(pool, user, "sunday_deleted", (rows.length && rows[0].data.date) || "");
       res.status(200).json({ ok: true });
       return;
     }

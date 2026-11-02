@@ -181,6 +181,10 @@
   .modal { background: var(--surface); border-radius: 14px; padding: 22px; width: 100%; max-width: 520px; box-shadow: var(--shadow); }
   .modal h2 { font-size: 1.25rem; margin-bottom: 16px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .activity-log-list { max-height: 60vh; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+  .activity-log-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 9px 2px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .activity-log-row:last-child { border-bottom: none; }
+  .activity-log-time { color: var(--text-dim); font-size: 0.76rem; white-space: nowrap; }
 
   .song-entry-row { border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; background: var(--surface-2); }
   .song-entry-row .field-row { margin-bottom: 8px; }
@@ -452,6 +456,7 @@
     <div class="row" style="gap:10px;">
       <div class="subtitle" id="statusLine">Loading…</div>
       <div class="subtitle" id="currentUserLabel"></div>
+      <button class="btn ghost small" id="btnActivityLog" hidden title="See what every account has done">Activity Log</button>
       <button class="btn ghost small" id="btnLogout" title="Log out">Log out</button>
     </div>
   </div>
@@ -802,6 +807,14 @@
     if (isNaN(d)) return iso;
     return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
   }
+  // For Activity Log timestamps (full ISO datetimes from the database), not
+  // the bare YYYY-MM-DD dates fmtDate above handles.
+  function fmtDateTime(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
   function nextSundayISO() {
     var d = new Date();
     var day = d.getDay();
@@ -885,6 +898,7 @@
     $("view-login").hidden = true;
     $("app").hidden = false;
     $("currentUserLabel").textContent = state.user ? ("Logged in as " + state.user.name) : "";
+    $("btnActivityLog").hidden = !(state.user && state.user.isAdmin);
     renderLibrary();
     renderTracker();
     loadAll().then(finishInit);
@@ -943,7 +957,8 @@
     state.authToken = saved.token;
     state.role = "editor";
     apiFetch("GET", "/api/whoami").then(function (r) {
-      if (r && r.user) { enterApp(); } else { clearSession(); showLoginScreen(); }
+      if (r && r.user) { state.user = r.user; persistSession(state.user, state.authToken); enterApp(); }
+      else { clearSession(); showLoginScreen(); }
     }).catch(function () { enterApp(); });
   }
 
@@ -1437,6 +1452,63 @@
     $("toastStack").appendChild(el);
     setTimeout(function () { el.remove(); }, 4000);
   }
+  // Turns one Activity Log row ({userName, action, detail}) into a plain
+  // sentence. "action" is whatever string the API route that logged it
+  // chose (see api/_activity.js callers) — unrecognized ones still show
+  // something readable instead of silently vanishing.
+  function activityLineText(entry) {
+    var name = entry.userName || "Someone";
+    var detail = entry.detail;
+    switch (entry.action) {
+      case "song_created": return name + ' added the song "' + (detail || "Untitled") + '"';
+      case "song_updated": return name + ' edited the song "' + (detail || "Untitled") + '"';
+      case "song_deleted": return name + ' deleted the song "' + (detail || "Untitled") + '"';
+      case "sunday_created": return name + " logged a new Sunday (" + (fmtDate(detail) || "no date") + ")";
+      case "sunday_updated": return name + " edited the Sunday set for " + (fmtDate(detail) || "an unnamed date");
+      case "sunday_deleted": return name + " deleted the Sunday set for " + (fmtDate(detail) || "an unnamed date");
+      case "logged_in": return name + " logged in";
+      case "activity_log_cleared": return name + " cleared the activity log";
+      default: return name + " " + (entry.action || "did something").replace(/_/g, " ");
+    }
+  }
+  // Admin-only (see state.user.isAdmin / api/activity.js): a read-only
+  // record of what every account has done — songs and Sunday sets added,
+  // edited, deleted, and logins — newest first.
+  function openActivityLogModal() {
+    var html =
+      '<div class="modal-backdrop" id="mb"><div class="modal" style="max-width:560px;">' +
+      "<h2>Activity Log</h2>" +
+      '<div id="activityLogBody" class="activity-log-list"><div class="meta-line">Loading…</div></div>' +
+      '<div class="modal-actions"><button class="btn ghost small" id="btnClearActivityLog" style="color:var(--danger);margin-right:auto;">Clear Log</button><button class="btn ghost" id="mCancel">Close</button></div>' +
+      "</div></div>";
+    $("modalRoot").innerHTML = html;
+    $("mCancel").onclick = closeModal;
+    $("mb").addEventListener("click", function (e) { if (e.target.id === "mb") closeModal(); });
+    $("btnClearActivityLog").addEventListener("click", clearActivityLog);
+    apiFetch("GET", "/api/activity").then(function (rows) {
+      if (!rows || !rows.length) { $("activityLogBody").innerHTML = '<div class="meta-line">Nothing logged yet.</div>'; return; }
+      $("activityLogBody").innerHTML = rows.map(function (entry) {
+        return '<div class="activity-log-row"><div>' + esc(activityLineText(entry)) + '</div><div class="activity-log-time">' + esc(fmtDateTime(entry.at)) + "</div></div>";
+      }).join("");
+    }).catch(function (e) {
+      $("activityLogBody").innerHTML = '<div class="meta-line">Couldn’t load the activity log: ' + esc(e.message) + "</div>";
+    });
+  }
+  // Storage isn't really a reason to clear this (a year of heavy use is
+  // still only a few MB), but it's here for anyone who'd rather start the
+  // log fresh — e.g. after reviewing it — than let it grow indefinitely.
+  function clearActivityLog() {
+    showConfirmModal("Clear the entire activity log? This can't be undone.", "Clear Log", function () {
+      apiFetch("DELETE", "/api/activity").then(function () {
+        showToast("Activity log cleared.");
+        openActivityLogModal();
+      }).catch(function (e) {
+        showToast("Couldn't clear the activity log: " + e.message, true);
+      });
+    });
+  }
+  $("btnActivityLog").addEventListener("click", openActivityLogModal);
+
   function showConfirmModal(message, confirmLabel, onConfirm) {
     var html =
       '<div class="modal-backdrop" id="mb"><div class="modal" style="max-width:420px;">' +

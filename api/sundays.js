@@ -1,6 +1,7 @@
 const { randomUUID } = require("crypto");
 const { getPool, rowToDoc } = require("./_db");
 const { requireUser } = require("./_auth");
+const { logActivity } = require("./_activity");
 
 module.exports = async (req, res) => {
   let pool;
@@ -20,10 +21,12 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === "POST") {
-      if (!requireUser(req, res)) return;
+      const user = requireUser(req, res);
+      if (!user) return;
       const id = randomUUID();
       const data = Object.assign({}, req.body, { createdAt: new Date().toISOString() });
       await pool.query("INSERT INTO sundays (id, data) VALUES ($1, $2::jsonb)", [id, JSON.stringify(data)]);
+      await logActivity(pool, user, "sunday_created", data.date || "");
       res.status(200).json(Object.assign({ id: id }, data));
       return;
     }
