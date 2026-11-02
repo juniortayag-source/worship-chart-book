@@ -45,9 +45,9 @@ api/sundays/[id].js   PATCH (update) / DELETE a Sunday log
 api/blob-upload.js    receives one rendered page image from the browser and stores it in Vercel Blob
 api/_db.js            shared Postgres connection helper
 api/_blob.js           shared Blob cleanup helper
-api/_auth.js           checks the optional edit password (see "Require a password" below)
-api/login.js           triggers the browser's login prompt for the edit password
-api/whoami.js           tells the front-end whether this visitor is currently logged in
+api/_auth.js           the worship-team accounts and login check (see "Accounts & login" below)
+api/login.js           checks the name/password the login screen submits
+api/whoami.js           confirms a remembered login is still valid on page load
 schema.sql            the two tables to create before first use
 ```
 
@@ -107,29 +107,46 @@ standalone copy of the app.
 If you ever see an error mentioning an unsupported Node.js version, go to
 **Project Settings → General → Node.js Version** and set it to 20.x or newer.
 
-### 4. Require a password to edit (optional)
+### 4. Accounts & login
 
-Anyone with the URL can always open the app and look through every song,
-chart, and Sunday log — viewing is never password-protected. To require a
-password before anyone can add, edit, delete, tag chords, or log a Sunday:
+The whole app sits behind a login screen — there's no view-only or public
+access anymore. Everyone picks their name from a dropdown, enters their
+password, and from then on can add, edit, delete, tag chords, and log
+Sundays; there's no separate viewer role. The built-in accounts are:
 
-- Go to **Project Settings → Environment Variables** and add `APP_PASSWORD`
-  set to whatever password you want your worship team to use.
-- Redeploy (same as above, since a new environment variable was added).
+| Name     | Password            |
+|----------|---------------------|
+| Junior   | MFBCworshipteam!!   |
+| Kris     | MFBCworshipteam!!   |
+| Katreena | MFBCworshipteam!!   |
+| Liezl    | MFBCworshipteam!!   |
+| Kevin    | MFBCworshipteam!!   |
+| Cristian | MFBCworshipteam!!   |
+| David    | MFBCworshipteam!!   |
+| Jayronn  | MFBCworshipteam!!   |
+| Kirsten  | MFBCworshipteam!!   |
+| Janine   | MFBCworshipteam!!   |
+| Brian    | MFBCworshipteam!!   |
 
-From then on, a fresh visitor sees a read-only app with a "Login" button
-(top right) and no edit buttons. Clicking Login shows your browser's own
-built-in password prompt — any username works, only the password is
-checked. Once entered correctly, the browser remembers it for the rest of
-that browsing session, so people won't be asked again every time they save
-something, and the edit buttons appear. Leave `APP_PASSWORD` unset (or
-delete it and redeploy) to make editing open to everyone too, with no Login
-button at all.
+These are defined directly in `api/_auth.js`, so the app works with no
+environment variables set. To change a name or password without touching
+code (and without it sitting in your git history), go to **Project
+Settings → Environment Variables** and add `APP_USERS` as a JSON array in
+this same shape, then redeploy:
 
-Browsers don't offer a real "log out" for this kind of login prompt, so
-once someone has logged in on a shared computer, the one guaranteed way to
-drop back to view-only on that browser is closing the tab (or using a
-private/incognito window) — there's no button for it.
+```json
+[{"id":"junior","name":"Junior","password":"MFBCworshipteam!!"},{"id":"kris","name":"Kris","password":"MFBCworshipteam!!"},{"id":"katrina","name":"Katreena","password":"MFBCworshipteam!!"},{"id":"liezl","name":"Liezl","password":"MFBCworshipteam!!"},{"id":"kevin","name":"Kevin","password":"MFBCworshipteam!!"},{"id":"cristian","name":"Cristian","password":"MFBCworshipteam!!"},{"id":"david","name":"David","password":"MFBCworshipteam!!"},{"id":"jayronn","name":"Jayronn","password":"MFBCworshipteam!!"},{"id":"kirsten","name":"Kirsten","password":"MFBCworshipteam!!"},{"id":"janine","name":"Janine","password":"MFBCworshipteam!!"},{"id":"brian","name":"Brian","password":"MFBCworshipteam!!"}]
+```
+
+If you add or rename someone this way, also update the `<option>` list in
+`index.html`'s login screen (search for `id="loginName"`) so their name
+shows up in the dropdown.
+
+A login is remembered for that browser tab (via `sessionStorage`) until
+"Log out" is clicked or the tab is closed — no need to sign in again on
+every reload. Each person's notes and drawings on a Sunday's set (the
+Annotate bar: notes, shapes, arrows, and freehand drawing) are private to
+them; everyone sees the same songs, setlists, and chord charts.
 
 ### 5. Updating later
 

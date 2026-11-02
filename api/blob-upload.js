@@ -1,5 +1,5 @@
 const { put } = require("@vercel/blob");
-const { requireEditor } = require("./_auth");
+const { requireUser } = require("./_auth");
 
 // Receives one rendered chord-chart page image (base64-encoded JSON, sent
 // from the browser after pdf.js draws the PDF page to a canvas) and stores
@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
-  if (!requireEditor(req, res)) return;
+  if (!requireUser(req, res)) return;
   try {
     var body = req.body || {};
     var filename = body.filename;

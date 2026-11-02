@@ -1,12 +1,11 @@
-const { roleOf } = require("./_auth");
+const { userOf } = require("./_auth");
 
-// Passively reports whether the browser is currently sending the correct
-// APP_PASSWORD (role "editor") or not (role "viewer", the default for
-// everyone until they click "Login") — purely so the front-end knows
-// whether to show editing controls. This route never challenges for a
-// password itself (see api/login.js for that); every write route enforces
-// the same check again on its own, so a view-only visitor can't get write
-// access just by skipping this call.
+// Passively reports who (if anyone) the credentials this browser tab is
+// sending belong to — used on page load to confirm a remembered login from
+// sessionStorage is still good (e.g. a password wasn't changed since). Never
+// challenges for credentials itself (see api/login.js for that), so it's
+// safe to call before the app knows whether anyone is logged in at all.
 module.exports = async (req, res) => {
-  res.status(200).json({ role: roleOf(req) });
+  const user = userOf(req);
+  res.status(200).json({ user: user || null });
 };

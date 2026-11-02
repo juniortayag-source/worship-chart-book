@@ -92,6 +92,10 @@
   .brand .mark { color: var(--accent); font-size: 1.5rem; }
   .subtitle { color: var(--text-dim); font-size: 0.85rem; }
 
+  .login-wrap { max-width: 360px; min-height: 85vh; display: flex; align-items: center; justify-content: center; }
+  .login-card { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; box-shadow: var(--shadow); box-sizing: border-box; }
+  .login-error { color: var(--danger); font-size: 0.82rem; margin: -6px 0 14px; }
+
   .tabs {
     display: flex; gap: 4px; margin: 18px 0 20px; width: fit-content;
     background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 4px;
@@ -405,13 +409,44 @@
   <option value="Am"><option value="Em"><option value="Bm"><option value="Dm"><option value="Gm"><option value="Cm">
 </datalist>
 
-<div class="wrap" id="app">
+<div class="wrap login-wrap" id="view-login" hidden>
+  <div class="login-card">
+    <div class="brand" style="justify-content:center;margin-bottom:18px;">
+      <span class="mark">&#9834;</span><h1>MFBC Worship Team</h1>
+    </div>
+    <div class="field">
+      <label>Name</label>
+      <select id="loginName">
+        <option value="">Choose your name…</option>
+        <option value="Junior">Junior</option>
+        <option value="Kris">Kris</option>
+        <option value="Katreena">Katreena</option>
+        <option value="Liezl">Liezl</option>
+        <option value="Kevin">Kevin</option>
+        <option value="Cristian">Cristian</option>
+        <option value="David">David</option>
+        <option value="Jayronn">Jayronn</option>
+        <option value="Kirsten">Kirsten</option>
+        <option value="Janine">Janine</option>
+        <option value="Brian">Brian</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="••••••••">
+    </div>
+    <div id="loginError" class="login-error" hidden></div>
+    <button class="btn primary" id="btnDoLogin" style="width:100%;justify-content:center;">Log in</button>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
   <div class="top">
     <div class="brand"><span class="mark">&#9834;</span><h1>MFBC Worship Team</h1></div>
     <div class="row" style="gap:10px;">
       <div class="subtitle" id="statusLine">Loading…</div>
-      <button class="btn ghost small" id="btnLogin" title="Log in to make changes">Login</button>
-      <button class="btn ghost small editor-only" id="btnLogout" title="Log out of edit mode">Log out</button>
+      <div class="subtitle" id="currentUserLabel"></div>
+      <button class="btn ghost small" id="btnLogout" title="Log out">Log out</button>
     </div>
   </div>
 
@@ -735,7 +770,7 @@
       return "list";
     }
   }
-  var state = { tab: "library", songId: null, transpose: 0, fontSize: 16, autoscroll: false, scrollTimer: null, libraryView: loadLibraryViewPref(), librarySort: { col: "title", dir: "asc" } };
+  var state = { tab: "library", songId: null, transpose: 0, fontSize: 16, autoscroll: false, scrollTimer: null, libraryView: loadLibraryViewPref(), librarySort: { col: "title", dir: "asc" }, user: null, authToken: null, role: "viewer" };
 
   var $ = function (id) { return document.getElementById(id); };
   function esc(s) {
@@ -763,6 +798,7 @@
   // any) on a non-2xx response, otherwise resolves the parsed JSON body.
   function apiFetch(method, url, body) {
     var opts = { method: method, headers: {} };
+    if (state.authToken) opts.headers["Authorization"] = "Basic " + state.authToken;
     if (body !== undefined) {
       opts.headers["Content-Type"] = "application/json";
       opts.body = JSON.stringify(body);
@@ -795,68 +831,103 @@
     $("statusLine").textContent = songs.length ? (songs.length + " song" + (songs.length === 1 ? "" : "s") + " in your library") : "";
   }
 
-  // The app itself and all of its data are public by default — viewing
-  // never requires a password (see api/whoami.js). This just asks the
-  // server whether THIS visitor's browser happens to already be sending the
-  // correct password (which it will, automatically, after a successful
-  // Login — see promptLogin below), so it knows whether to show editing
-  // controls. The API routes enforce the same restriction server-side
-  // regardless of what this reports, so it's just the UI half.
-  function loadRole() {
-    return apiFetch("GET", "/api/whoami").then(function (r) {
-      state.role = (r && r.role) || "viewer";
-    }).catch(function () {
-      state.role = "viewer";
-    }).then(function () {
-      var isViewer = state.role === "viewer";
-      document.body.classList.toggle("role-viewer", isViewer);
-      $("btnLogin").hidden = !isViewer;
-    });
+  // The whole app now sits behind the login screen (#view-login) — there's
+  // no public/view-only mode anymore, and every account can edit. Instead of
+  // the old trick of triggering the browser's native Basic Auth dialog, the
+  // login screen is a normal form: on submit we build the same kind of
+  // "name:password" Basic Auth value by hand and send it once to confirm it,
+  // then keep it in state.authToken (and this tab's sessionStorage, so a
+  // reload doesn't force a re-login) and attach it ourselves to every
+  // request from then on — see apiFetch above.
+  function persistSession(user, token) {
+    try { sessionStorage.setItem("mfbcAuth", JSON.stringify({ user: user, token: token })); } catch (e) {}
   }
-
-  // Clicking "Login" calls an endpoint (api/login.js) that always demands
-  // HTTP Basic Auth, which is what makes the browser pop its own native
-  // username/password dialog right here — no custom login form needed. Any
-  // username works; only the password matters. Once entered correctly, the
-  // browser remembers it for the rest of this browsing session and starts
-  // sending it automatically with every request from here on, so there's
-  // nothing else to wire up: the same credentials just work for saving
-  // changes too. If the dialog is canceled or the password is wrong, this
-  // quietly leaves things in view-only mode.
-  function promptLogin() {
-    fetch("/api/login", { cache: "no-store" }).then(function (res) {
-      if (res.ok) {
-        showToast("Logged in.");
-        return loadRole();
-      }
-    }).catch(function () {
-      showToast("Couldn't reach the server to log in. Try again in a moment.");
-    });
-  }
-  $("btnLogin").addEventListener("click", promptLogin);
-
-  // Basic Auth has no real "sign out" — the browser just keeps sending
-  // whatever password last worked, for the rest of the browsing session.
-  // The standard workaround: send one request with a deliberately wrong
-  // password, which makes the server issue a fresh 401 challenge and the
-  // browser drop the good credentials it had cached, without popping a
-  // prompt (since this attempt was supplied by script, not left blank).
-  // A plain reload (or re-checking role, as we do here) then shows a
-  // logged-out, view-only app again. Works in most current browsers; the
-  // one guaranteed fallback if yours doesn't drop it is closing this tab
-  // (or using a private/incognito window).
-  function promptLogout() {
+  function restoreSession() {
     try {
-      var xhr = new XMLHttpRequest();
-      xhr.open("GET", "/api/login?logout=" + Date.now(), true, "logout", "x" + Date.now());
-      xhr.onloadend = function () { loadRole().then(function () { showToast("Logged out."); }); };
-      xhr.onerror = function () { loadRole(); };
-      xhr.send();
+      var raw = sessionStorage.getItem("mfbcAuth");
+      return raw ? JSON.parse(raw) : null;
     } catch (e) {
-      loadRole();
+      return null;
     }
   }
-  $("btnLogout").addEventListener("click", promptLogout);
+  function clearSession() {
+    try { sessionStorage.removeItem("mfbcAuth"); } catch (e) {}
+    state.user = null;
+    state.authToken = null;
+    state.role = "viewer";
+  }
+  function showLoginScreen() {
+    $("app").hidden = true;
+    $("view-login").hidden = false;
+    $("loginPassword").value = "";
+    $("loginError").hidden = true;
+    (document.getElementById("loginName").value ? $("loginPassword") : $("loginName")).focus();
+  }
+  function enterApp() {
+    $("view-login").hidden = true;
+    $("app").hidden = false;
+    $("currentUserLabel").textContent = state.user ? ("Logged in as " + state.user.name) : "";
+    renderLibrary();
+    renderTracker();
+    loadAll().then(finishInit);
+  }
+  function doLogin() {
+    var name = ($("loginName").value || "").trim();
+    var password = $("loginPassword").value || "";
+    if (!name || !password) {
+      $("loginError").textContent = "Pick your name and enter your password.";
+      $("loginError").hidden = false;
+      return;
+    }
+    var token = btoa(name + ":" + password);
+    $("btnDoLogin").disabled = true;
+    fetch("/api/login", { headers: { Authorization: "Basic " + token }, cache: "no-store" }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, data: data }; });
+    }).then(function (r) {
+      $("btnDoLogin").disabled = false;
+      if (!r.ok || !r.data.user) {
+        $("loginError").textContent = (r.data && r.data.error) || "Incorrect name or password.";
+        $("loginError").hidden = false;
+        return;
+      }
+      state.user = r.data.user;
+      state.authToken = token;
+      state.role = "editor";
+      persistSession(state.user, token);
+      enterApp();
+      showToast("Welcome, " + state.user.name + ".");
+    }).catch(function () {
+      $("btnDoLogin").disabled = false;
+      $("loginError").textContent = "Couldn't reach the server. Try again in a moment.";
+      $("loginError").hidden = false;
+    });
+  }
+  $("btnDoLogin").addEventListener("click", doLogin);
+  $("loginPassword").addEventListener("keydown", function (e) { if (e.key === "Enter") doLogin(); });
+  $("loginName").addEventListener("keydown", function (e) { if (e.key === "Enter") $("loginPassword").focus(); });
+
+  function doLogout() {
+    clearSession();
+    showLoginScreen();
+    showToast("Logged out.");
+  }
+  $("btnLogout").addEventListener("click", doLogout);
+
+  // On load, if this tab already logged in earlier in the session, confirm
+  // those credentials still work (a password may have changed since) before
+  // trusting them; if the server can't be reached at all, go ahead and show
+  // the app with what's cached rather than locking someone out over a
+  // network blip — every write route checks the credentials again regardless.
+  function boot() {
+    var saved = restoreSession();
+    if (!saved || !saved.user || !saved.token) { showLoginScreen(); return; }
+    state.user = saved.user;
+    state.authToken = saved.token;
+    state.role = "editor";
+    apiFetch("GET", "/api/whoami").then(function (r) {
+      if (r && r.user) { enterApp(); } else { clearSession(); showLoginScreen(); }
+    }).catch(function () { enterApp(); });
+  }
 
   /* ============================== PDF PROCESSING ============================== */
   // The original PDF file never leaves the browser and is never uploaded or
@@ -1845,7 +1916,7 @@
         // Annotations are positioned as a percentage of the whole canvas's
         // height, so when dragging a gap changes that total height, refresh
         // them to the best-effort position under the new layout.
-        if (sun.annotations && sun.annotations.length) renderAnnotations(sun);
+        if (userAnnotations(sun).length) renderAnnotations(sun);
       }
       handle.addEventListener("pointerdown", function (e) {
         if (e.button !== undefined && e.button !== 0) return;
@@ -1883,8 +1954,28 @@
   // its pointer capture, and its listeners all survive the gesture; a full
   // re-render only happens when something is added or removed.
   function currentSetlistSunday() { return sundays.find(function (x) { return x.id === state.setlistId; }); }
+  // Each account's annotations on a set are its own — stored under
+  // sun.annotationsByUser[userId] rather than one shared list. The first
+  // time a given user opens a particular set, their slice is seeded from
+  // whatever was there before accounts had their own (sun.annotations, the
+  // old shared/flat list — empty for any set created after this change), so
+  // nothing already drawn vanished on day one of the switch; after that,
+  // each account's copy only ever changes for them.
+  function userAnnotations(sun) {
+    var userId = state.user && state.user.id;
+    if (!userId) return [];
+    sun.annotationsByUser = sun.annotationsByUser || {};
+    if (!sun.annotationsByUser[userId]) {
+      sun.annotationsByUser[userId] = (sun.annotations || []).map(function (a) { return Object.assign({}, a); });
+    }
+    return sun.annotationsByUser[userId];
+  }
   function saveAnnotations(sun) {
-    apiFetch("PATCH", "/api/sundays/" + sun.id, { annotations: sun.annotations || [] }).catch(function (e) {
+    var userId = state.user && state.user.id;
+    if (!userId) return;
+    var body = {};
+    body[userId] = sun.annotationsByUser && sun.annotationsByUser[userId] || [];
+    apiFetch("PATCH", "/api/sundays/" + sun.id, { annotationsByUser: body }).catch(function (e) {
       showToast("Couldn't save that annotation: " + e.message, true);
     });
   }
@@ -1896,15 +1987,14 @@
   function annoDefaultPosition(sun) {
     var rect = $("setlistCanvas").getBoundingClientRect();
     var h = rect.height || 1, w = rect.width || 1;
-    var n = (sun.annotations || []).length;
+    var n = userAnnotations(sun).length;
     var yPx = Math.max(20, (window.innerHeight / 2) - rect.top) + (n % 4) * 26;
     return { xPct: 34 + (n % 5) * 7, yPct: (yPx / h) * 100, canvasHeight: h, canvasWidth: w };
   }
   function addNoteAnnotation() {
     var sun = currentSetlistSunday(); if (!sun) return;
     var pos = annoDefaultPosition(sun);
-    sun.annotations = sun.annotations || [];
-    sun.annotations.push({ id: uid(), type: "note", xPct: pos.xPct, yPct: pos.yPct, text: "Note" });
+    userAnnotations(sun).push({ id: uid(), type: "note", xPct: pos.xPct, yPct: pos.yPct, text: "Note" });
     renderAnnotations(sun);
     saveAnnotations(sun);
   }
@@ -1917,17 +2007,15 @@
   function addShapeAnnotation(type) {
     var sun = currentSetlistSunday(); if (!sun) return;
     var pos = annoDefaultPosition(sun);
-    sun.annotations = sun.annotations || [];
-    sun.annotations.push({ id: uid(), type: type, xPct: pos.xPct, yPct: pos.yPct, wPct: (120 / pos.canvasWidth) * 100, hPct: (80 / pos.canvasWidth) * 100 });
+    userAnnotations(sun).push({ id: uid(), type: type, xPct: pos.xPct, yPct: pos.yPct, wPct: (120 / pos.canvasWidth) * 100, hPct: (80 / pos.canvasWidth) * 100 });
     renderAnnotations(sun);
     saveAnnotations(sun);
   }
   function addArrowAnnotation() {
     var sun = currentSetlistSunday(); if (!sun) return;
     var pos = annoDefaultPosition(sun);
-    sun.annotations = sun.annotations || [];
     var y2Pct = pos.yPct + (60 / pos.canvasHeight) * 100;
-    sun.annotations.push({ id: uid(), type: "arrow", x1Pct: pos.xPct, y1Pct: pos.yPct, x2Pct: Math.min(95, pos.xPct + 18), y2Pct: y2Pct });
+    userAnnotations(sun).push({ id: uid(), type: "arrow", x1Pct: pos.xPct, y1Pct: pos.yPct, x2Pct: Math.min(95, pos.xPct + 18), y2Pct: y2Pct });
     renderAnnotations(sun);
     saveAnnotations(sun);
   }
@@ -1979,14 +2067,18 @@
 
   function renderAnnotations(sun) {
     var layer = $("annotationLayer");
-    var list = sun.annotations || [];
+    var userId = state.user && state.user.id;
+    var seededFromLegacy = userId && !(sun.annotationsByUser && sun.annotationsByUser[userId]);
+    var list = userAnnotations(sun);
     var rect = $("setlistCanvas").getBoundingClientRect();
     var canvasWidth = rect.width, canvasHeight = rect.height || 1;
     // One-time migration for annotations saved by an earlier version of this
     // feature that stored raw pixel y-positions and raw pixel sizes: convert
     // to percentages using the canvas's current size, then persist that so
     // they stop drifting/mis-sizing on future reflows or on other screens.
-    var migrated = false;
+    // Also persist right away if this user's slice was just seeded from the
+    // old shared/flat list above, so it isn't lost if they never touch it.
+    var migrated = seededFromLegacy && list.length > 0;
     list.forEach(function (a) {
       if (a.yPct === undefined && a.yPx !== undefined) { a.yPct = (a.yPx / canvasHeight) * 100; migrated = true; }
       if (a.y1Pct === undefined && a.y1Px !== undefined) { a.y1Pct = (a.y1Px / canvasHeight) * 100; migrated = true; }
@@ -2078,7 +2170,7 @@
 
     Array.prototype.forEach.call(layer.querySelectorAll(".annotation-note"), function (noteEl) {
       var id = noteEl.getAttribute("data-annoid");
-      var a = (sun.annotations || []).find(function (x) { return x.id === id; });
+      var a = userAnnotations(sun).find(function (x) { return x.id === id; });
       if (!a) return;
       var startXPct, startYPct;
       startDrag(noteEl, function (dx, dy, rect) {
@@ -2138,7 +2230,7 @@
 
     Array.prototype.forEach.call(layer.querySelectorAll(".annotation-shape"), function (shapeEl) {
       var id = shapeEl.getAttribute("data-annoid");
-      var a = (sun.annotations || []).find(function (x) { return x.id === id; });
+      var a = userAnnotations(sun).find(function (x) { return x.id === id; });
       if (!a) return;
       var startXPct, startYPct;
       startDrag(shapeEl, function (dx, dy, rect) {
@@ -2175,7 +2267,7 @@
 
     Array.prototype.forEach.call(layer.querySelectorAll(".anno-arrow-svg"), function (svgEl) {
       var id = svgEl.getAttribute("data-annoid");
-      var a = (sun.annotations || []).find(function (x) { return x.id === id; });
+      var a = userAnnotations(sun).find(function (x) { return x.id === id; });
       if (!a) return;
       var els = {
         svg: svgEl,
@@ -2224,7 +2316,7 @@
 
     Array.prototype.forEach.call(layer.querySelectorAll(".anno-draw-svg"), function (svgEl) {
       var id = svgEl.getAttribute("data-annoid");
-      var a = (sun.annotations || []).find(function (x) { return x.id === id; });
+      var a = userAnnotations(sun).find(function (x) { return x.id === id; });
       if (!a) return;
       var els = {
         svg: svgEl,
@@ -2298,8 +2390,7 @@
     if (annoDrawState.pts.length > 1) {
       var sun = currentSetlistSunday();
       if (sun) {
-        sun.annotations = sun.annotations || [];
-        sun.annotations.push({ id: uid(), type: "draw", points: annoDrawState.pts });
+        userAnnotations(sun).push({ id: uid(), type: "draw", points: annoDrawState.pts });
         renderAnnotations(sun);
         saveAnnotations(sun);
       }
@@ -2318,7 +2409,10 @@
     e.stopPropagation();
     var sun = currentSetlistSunday(); if (!sun) return;
     var id = delBtn.getAttribute("data-del");
-    sun.annotations = (sun.annotations || []).filter(function (x) { return x.id !== id; });
+    var userId = state.user && state.user.id;
+    if (userId && sun.annotationsByUser && sun.annotationsByUser[userId]) {
+      sun.annotationsByUser[userId] = sun.annotationsByUser[userId].filter(function (x) { return x.id !== id; });
+    }
     renderAnnotations(sun);
     saveAnnotations(sun);
   });
@@ -2987,9 +3081,7 @@
   });
 
   /* ============================== BOOT ============================== */
-  renderLibrary();
-  renderTracker();
-  Promise.all([loadRole(), loadAll()]).then(finishInit);
+  boot();
 })();
 </script>
 </body>
