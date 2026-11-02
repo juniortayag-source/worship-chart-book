@@ -116,17 +116,17 @@ Sundays; there's no separate viewer role. The built-in accounts are:
 
 | Name     | Password            |
 |----------|---------------------|
-| Junior   | MFBCworshipteam!!   |
-| Kris     | MFBCworshipteam!!   |
-| Katreena | MFBCworshipteam!!   |
-| Liezl    | MFBCworshipteam!!   |
-| Kevin    | MFBCworshipteam!!   |
+| Brian    | MFBCworshipteam!!   |
 | Cristian | MFBCworshipteam!!   |
 | David    | MFBCworshipteam!!   |
-| Jayronn  | MFBCworshipteam!!   |
-| Kirsten  | MFBCworshipteam!!   |
 | Janine   | MFBCworshipteam!!   |
-| Brian    | MFBCworshipteam!!   |
+| Jayronn  | MFBCworshipteam!!   |
+| Junior   | MFBCworshipteam!!   |
+| Katreena | MFBCworshipteam!!   |
+| Kevin    | MFBCworshipteam!!   |
+| Kirsten  | MFBCworshipteam!!   |
+| Kris     | MFBCworshipteam!!   |
+| Liezl    | MFBCworshipteam!!   |
 
 These are defined directly in `api/_auth.js`, so the app works with no
 environment variables set. To change a name or password without touching
@@ -135,7 +135,7 @@ Settings → Environment Variables** and add `APP_USERS` as a JSON array in
 this same shape, then redeploy:
 
 ```json
-[{"id":"junior","name":"Junior","password":"MFBCworshipteam!!"},{"id":"kris","name":"Kris","password":"MFBCworshipteam!!"},{"id":"katrina","name":"Katreena","password":"MFBCworshipteam!!"},{"id":"liezl","name":"Liezl","password":"MFBCworshipteam!!"},{"id":"kevin","name":"Kevin","password":"MFBCworshipteam!!"},{"id":"cristian","name":"Cristian","password":"MFBCworshipteam!!"},{"id":"david","name":"David","password":"MFBCworshipteam!!"},{"id":"jayronn","name":"Jayronn","password":"MFBCworshipteam!!"},{"id":"kirsten","name":"Kirsten","password":"MFBCworshipteam!!"},{"id":"janine","name":"Janine","password":"MFBCworshipteam!!"},{"id":"brian","name":"Brian","password":"MFBCworshipteam!!"}]
+[{"id":"brian","name":"Brian","password":"MFBCworshipteam!!"},{"id":"cristian","name":"Cristian","password":"MFBCworshipteam!!"},{"id":"david","name":"David","password":"MFBCworshipteam!!"},{"id":"janine","name":"Janine","password":"MFBCworshipteam!!"},{"id":"jayronn","name":"Jayronn","password":"MFBCworshipteam!!"},{"id":"junior","name":"Junior","password":"MFBCworshipteam!!"},{"id":"katrina","name":"Katreena","password":"MFBCworshipteam!!"},{"id":"kevin","name":"Kevin","password":"MFBCworshipteam!!"},{"id":"kirsten","name":"Kirsten","password":"MFBCworshipteam!!"},{"id":"kris","name":"Kris","password":"MFBCworshipteam!!"},{"id":"liezl","name":"Liezl","password":"MFBCworshipteam!!"}]
 ```
 
 If you add or rename someone this way, also update the `<option>` list in

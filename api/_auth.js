@@ -19,17 +19,17 @@
 // changes, which keeps that person's existing notes attached to their
 // account instead of orphaning them under an id nobody logs in as anymore.
 var DEFAULT_USERS = [
-  { id: "junior", name: "Junior", password: "MFBCworshipteam!!" },
-  { id: "kris", name: "Kris", password: "MFBCworshipteam!!" },
-  { id: "katrina", name: "Katreena", password: "MFBCworshipteam!!" },
-  { id: "liezl", name: "Liezl", password: "MFBCworshipteam!!" },
-  { id: "kevin", name: "Kevin", password: "MFBCworshipteam!!" },
+  { id: "brian", name: "Brian", password: "MFBCworshipteam!!" },
   { id: "cristian", name: "Cristian", password: "MFBCworshipteam!!" },
   { id: "david", name: "David", password: "MFBCworshipteam!!" },
-  { id: "jayronn", name: "Jayronn", password: "MFBCworshipteam!!" },
-  { id: "kirsten", name: "Kirsten", password: "MFBCworshipteam!!" },
   { id: "janine", name: "Janine", password: "MFBCworshipteam!!" },
-  { id: "brian", name: "Brian", password: "MFBCworshipteam!!" },
+  { id: "jayronn", name: "Jayronn", password: "MFBCworshipteam!!" },
+  { id: "junior", name: "Junior", password: "MFBCworshipteam!!" },
+  { id: "katrina", name: "Katreena", password: "MFBCworshipteam!!" },
+  { id: "kevin", name: "Kevin", password: "MFBCworshipteam!!" },
+  { id: "kirsten", name: "Kirsten", password: "MFBCworshipteam!!" },
+  { id: "kris", name: "Kris", password: "MFBCworshipteam!!" },
+  { id: "liezl", name: "Liezl", password: "MFBCworshipteam!!" },
 ];
 
 function loadUsers() {
