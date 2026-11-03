@@ -163,8 +163,11 @@
   .avail-table { width: 100%; border-collapse: collapse; background: var(--surface); }
   .avail-table th, .avail-table td { text-align: center; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 0.82rem; white-space: nowrap; }
   .avail-table th { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); background: var(--surface-2); }
-  .avail-table th.avail-date-col, .avail-table td.avail-date-cell { text-align: left; }
-  .avail-table td.avail-date-cell { font-weight: 600; }
+  .avail-table th.avail-date-col, .avail-table td.avail-date-cell {
+    text-align: left; position: sticky; left: 0; z-index: 2; box-shadow: 1px 0 0 var(--border);
+  }
+  .avail-table th.avail-date-col { background: var(--surface-2); z-index: 3; }
+  .avail-table td.avail-date-cell { font-weight: 600; background: var(--surface); }
   .avail-table th.avail-me-col { color: var(--accent); }
   .avail-table tbody tr:last-child td { border-bottom: none; }
   .avail-pill {
