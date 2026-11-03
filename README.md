@@ -125,7 +125,7 @@ Sundays; there's no separate viewer role. The built-in accounts are:
 | David    | MFBCworshipteam!!   |
 | Janine   | MFBCworshipteam!!   |
 | Jayronn  | MFBCworshipteam!!   |
-| Junior   | MFBCworshipteam!!   |
+| Junior   | MFBCWorshipAdmin!   |
 | Katreena | MFBCworshipteam!!   |
 | Kevin    | MFBCworshipteam!!   |
 | Kirsten  | MFBCworshipteam!!   |
@@ -139,7 +139,7 @@ Settings → Environment Variables** and add `APP_USERS` as a JSON array in
 this same shape, then redeploy:
 
 ```json
-[{"id":"brian","name":"Brian","password":"MFBCworshipteam!!"},{"id":"cristian","name":"Cristian","password":"MFBCworshipteam!!"},{"id":"david","name":"David","password":"MFBCworshipteam!!"},{"id":"janine","name":"Janine","password":"MFBCworshipteam!!"},{"id":"jayronn","name":"Jayronn","password":"MFBCworshipteam!!"},{"id":"junior","name":"Junior","password":"MFBCworshipteam!!"},{"id":"katrina","name":"Katreena","password":"MFBCworshipteam!!"},{"id":"kevin","name":"Kevin","password":"MFBCworshipteam!!"},{"id":"kirsten","name":"Kirsten","password":"MFBCworshipteam!!"},{"id":"kris","name":"Kris","password":"MFBCworshipteam!!"},{"id":"liezl","name":"Liezl","password":"MFBCworshipteam!!"}]
+[{"id":"brian","name":"Brian","password":"MFBCworshipteam!!"},{"id":"cristian","name":"Cristian","password":"MFBCworshipteam!!"},{"id":"david","name":"David","password":"MFBCworshipteam!!"},{"id":"janine","name":"Janine","password":"MFBCworshipteam!!"},{"id":"jayronn","name":"Jayronn","password":"MFBCworshipteam!!"},{"id":"junior","name":"Junior","password":"MFBCWorshipAdmin!","isAdmin":true},{"id":"katrina","name":"Katreena","password":"MFBCworshipteam!!"},{"id":"kevin","name":"Kevin","password":"MFBCworshipteam!!"},{"id":"kirsten","name":"Kirsten","password":"MFBCworshipteam!!"},{"id":"kris","name":"Kris","password":"MFBCworshipteam!!"},{"id":"liezl","name":"Liezl","password":"MFBCworshipteam!!"}]
 ```
 
 If you add or rename someone this way, also update the `<option>` list in

@@ -3019,15 +3019,13 @@
       var song = songs.find(function (s) { return s.id === k; });
       return { id: k, title: song ? song.title : (k || "Untitled"), count: counts[k] };
     }).sort(function (a, b) { return b.count - a.count; }).slice(0, 5);
-    return { totalSundays: sundays.length, librarySize: songs.length, top: top };
+    return { top: top };
   }
   function renderTracker() {
     var stats = computeStats();
     var maxCount = stats.top.length ? stats.top[0].count : 1;
     $("statsGrid").innerHTML =
-      '<div class="stat-tile"><div class="num">' + stats.totalSundays + '</div><div class="lbl">Sundays logged</div></div>' +
-      '<div class="stat-tile"><div class="num">' + stats.librarySize + '</div><div class="lbl">Songs in library</div></div>' +
-      '<div class="stat-tile" style="grid-column: span 2;">' +
+      '<div class="stat-tile" style="grid-column: 1 / -1;">' +
       '<div class="lbl" style="margin-bottom:8px;">Most played</div>' +
       '<div class="top-songs-list">' +
       (stats.top.length ? stats.top.map(function (t, i) {
