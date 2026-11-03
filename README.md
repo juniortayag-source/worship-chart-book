@@ -50,6 +50,8 @@ api/_activity.js        records one Activity Log entry (called from the routes a
 api/activity.js         GET the Activity Log — admin accounts only (see "Activity Log" below)
 api/login.js           checks the name/password the login screen submits
 api/whoami.js           confirms a remembered login is still valid on page load
+api/users.js            GET the team roster (id + name only) — used to build the Availability grid
+api/availability.js     GET all availability / PATCH your own yes-or-no for one Sunday date
 schema.sql            the tables to create before first use
 ```
 
@@ -166,7 +168,23 @@ before this feature existed, re-run `schema.sql` against your database once
 (same as the first-time setup in step 1) — it only adds what's missing, so
 it's safe to run again.
 
-### 6. Updating later
+### 6. Availability
+
+A third tab, **Availability**, shows a grid of the next six Sundays against
+everyone on the roster. Tap your own column to cycle through Yes &rarr; No
+&rarr; (blank) for a given date — everyone can see everyone's answers (not
+just their own), so whoever's about to build a set knows who's around, but
+nobody can change anyone else's answer. "Build a set" (renamed from "Log a
+Sunday" — same feature, same button, now available from both the Library
+and Sunday Sets tabs) works independently of this: a date doesn't need a set
+built for it before people can mark their availability.
+
+This uses a new table (`availability`), so if you already deployed this app
+before this feature existed, re-run `schema.sql` once more (safe to run
+again, same as step 5 above). Availability answers aren't shown in the
+Activity Log, the same as everyone's private annotations.
+
+### 7. Updating later
 
 Any time you want to change the app, edit the files and push to GitHub again
 — Vercel redeploys automatically on every push to your main branch.

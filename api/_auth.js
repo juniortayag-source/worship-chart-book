@@ -95,7 +95,18 @@ function requireUser(req, res) {
   return user;
 }
 
+// Just { id, name } for every account — no passwords, no isAdmin. Safe to
+// hand to any logged-in account; it's the same roster the login screen's own
+// dropdown already shows, just usable by the app itself (e.g. to build the
+// Availability grid's columns).
+function publicUsers() {
+  return loadUsers().map(function (u) {
+    return { id: u.id, name: u.name };
+  });
+}
+
 module.exports = {
   userOf: userOf,
   requireUser: requireUser,
+  publicUsers: publicUsers,
 };

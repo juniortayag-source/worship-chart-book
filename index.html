@@ -159,6 +159,24 @@
   .song-table td.title-cell { font-weight: 600; cursor: pointer; }
   .song-table td.title-cell:hover { color: var(--accent); }
   .song-table th.actions-col, .song-table td.actions-cell { width: 1%; white-space: nowrap; text-align: right; }
+  .avail-table-wrap { margin-top: 4px; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+  .avail-table { width: 100%; border-collapse: collapse; background: var(--surface); }
+  .avail-table th, .avail-table td { text-align: center; padding: 9px 12px; border-bottom: 1px solid var(--border); font-size: 0.82rem; white-space: nowrap; }
+  .avail-table th { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); background: var(--surface-2); }
+  .avail-table th.avail-date-col, .avail-table td.avail-date-cell { text-align: left; }
+  .avail-table td.avail-date-cell { font-weight: 600; }
+  .avail-table th.avail-me-col { color: var(--accent); }
+  .avail-table tbody tr:last-child td { border-bottom: none; }
+  .avail-pill {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 44px;
+    padding: 4px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 700;
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--text-dim);
+  }
+  .avail-pill.yes { background: var(--accent-dim); color: var(--accent); border-color: transparent; }
+  .avail-pill.no { background: var(--danger); color: var(--surface); border-color: transparent; opacity: 0.85; }
+  button.avail-pill.me { cursor: pointer; }
+  button.avail-pill.me:hover { filter: brightness(1.08); }
+  button.avail-pill.me:disabled { opacity: 0.6; cursor: default; }
   .song-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
     box-shadow: var(--shadow); text-align: left; display: flex; flex-direction: column; gap: 6px; position: relative;
@@ -468,6 +486,7 @@
   <div class="tabs" id="tabs">
     <button class="tab-btn active" data-tab="library">Library</button>
     <button class="tab-btn" data-tab="tracker">Sunday Sets</button>
+    <button class="tab-btn" data-tab="availability">Availability</button>
   </div>
 
   <!-- LIBRARY VIEW -->
@@ -479,6 +498,7 @@
         <button type="button" id="btnViewGrid" aria-pressed="false">Grid</button>
         <button type="button" id="btnViewList" aria-pressed="true">List</button>
       </div>
+      <button class="btn ghost small editor-only" id="btnLibraryBuildSet">+ Build a set</button>
       <button class="btn primary editor-only" id="btnAddSong">+ Add song</button>
     </div>
     <div id="songGrid" class="song-grid"></div>
@@ -656,7 +676,7 @@
     <div class="stats-grid" id="statsGrid"></div>
     <div class="row" style="margin-bottom:14px;">
       <div class="spacer"></div>
-      <button class="btn primary editor-only" id="btnLogSunday">+ Log a Sunday</button>
+      <button class="btn primary editor-only" id="btnLogSunday">+ Build a set</button>
     </div>
 
     <h3 style="font-size:1.1rem;margin-bottom:10px;">Upcoming Services</h3>
@@ -668,6 +688,16 @@
     <div id="trackerEmpty" class="empty-state" hidden>
       <h3>No past services yet</h3>
       <div>Services will appear here once their date has passed.</div>
+    </div>
+  </div>
+
+  <!-- AVAILABILITY VIEW -->
+  <div id="view-availability" hidden>
+    <p class="meta-line" style="margin-bottom:14px;">Who can make it on which upcoming Sunday. Tap your own column to mark yourself available or not &mdash; everyone can see everyone's answers, so whoever's building the set knows who's around.</p>
+    <div id="availabilityWrap"></div>
+    <div id="availabilityEmpty" class="empty-state" hidden>
+      <h3>No one on the roster yet</h3>
+      <div>Add accounts in <code>api/_auth.js</code> (or <code>APP_USERS</code>) to see them here.</div>
     </div>
   </div>
 </div>
@@ -783,8 +813,10 @@
   }
 
   /* ============================== APP STATE ============================== */
-  var songs = [];   // local cache of song docs {id,...}
-  var sundays = []; // local cache of sunday docs {id,...}
+  var songs = [];        // local cache of song docs {id,...}
+  var sundays = [];      // local cache of sunday docs {id,...}
+  var teamUsers = [];    // local cache of the roster {id,name}, for the Availability grid's columns
+  var availability = []; // local cache of availability docs {id(=date), date, responses:{userId:"yes"|"no"}}
   function loadLibraryViewPref() {
     try {
       var v = localStorage.getItem("libraryView");
@@ -843,14 +875,22 @@
   }
 
   function loadAll() {
-    return Promise.all([apiFetch("GET", "/api/songs"), apiFetch("GET", "/api/sundays")]).then(function (r) {
+    return Promise.all([
+      apiFetch("GET", "/api/songs"),
+      apiFetch("GET", "/api/sundays"),
+      apiFetch("GET", "/api/users"),
+      apiFetch("GET", "/api/availability"),
+    ]).then(function (r) {
       songs = r[0] || [];
       sundays = r[1] || [];
+      teamUsers = r[2] || [];
+      availability = r[3] || [];
       songs.sort(function (a, b) { return (a.title || "").localeCompare(b.title || ""); });
       sundays.sort(function (a, b) { return (b.date || "").localeCompare(a.date || ""); });
       $("capBanner").hidden = true;
       renderLibrary();
       renderTracker();
+      renderAvailability();
       if (state.tab === "song" && state.songId) renderSongView();
       if (state.tab === "setlist" && state.setlistId) refreshSetlistView();
     }).catch(function (e) {
@@ -901,6 +941,7 @@
     $("btnActivityLog").hidden = !(state.user && state.user.isAdmin);
     renderLibrary();
     renderTracker();
+    renderAvailability();
     loadAll().then(finishInit);
   }
   function doLogin() {
@@ -2972,7 +3013,7 @@
       '<div class="top-songs-list">' +
       (stats.top.length ? stats.top.map(function (t, i) {
         return '<div class="trow"><span class="n">' + (i + 1) + '.</span><span style="flex:1">' + esc(t.title) + '</span><div class="bar"><i style="width:' + (t.count / maxCount * 100) + '%"></i></div><span class="count">' + t.count + "&times;</span></div>";
-      }).join("") : '<div class="meta-line">Log a Sunday to see trends here.</div>') +
+      }).join("") : '<div class="meta-line">Build a set to see trends here.</div>') +
       "</div></div>";
 
     var todayISO = new Date().toISOString().slice(0, 10);
@@ -3025,6 +3066,66 @@
   $("sundayList").addEventListener("click", sundayListClickHandler);
   $("upcomingSundayList").addEventListener("click", sundayListClickHandler);
   $("btnLogSunday").addEventListener("click", function () { openLogSundayModal({}); });
+  $("btnLibraryBuildSet").addEventListener("click", function () { openLogSundayModal({}); });
+
+  /* ============================== AVAILABILITY ============================== */
+  // The next several Sundays, regardless of whether a set has been built for
+  // them yet — availability is meant to be marked ahead of that, not after.
+  function upcomingAvailabilityDates(n) {
+    var first = nextSundayISO();
+    var out = [];
+    for (var i = 0; i < n; i++) {
+      var d = new Date(first + "T12:00:00");
+      d.setDate(d.getDate() + i * 7);
+      out.push(d.toISOString().slice(0, 10));
+    }
+    return out;
+  }
+  var AVAIL_CYCLE = { "": "yes", "yes": "no", "no": "" };
+  function renderAvailability() {
+    $("availabilityEmpty").hidden = teamUsers.length !== 0;
+    if (!teamUsers.length) { $("availabilityWrap").innerHTML = ""; return; }
+    var dates = upcomingAvailabilityDates(6);
+    var rows = dates.map(function (date) {
+      var row = availability.find(function (a) { return a.date === date; });
+      return { date: date, responses: (row && row.responses) || {} };
+    });
+    var html = '<div class="avail-table-wrap"><table class="avail-table"><thead><tr><th class="avail-date-col">Date</th>' +
+      teamUsers.map(function (u) {
+        return '<th class="' + (state.user && u.id === state.user.id ? "avail-me-col" : "") + '">' + esc(u.name) + "</th>";
+      }).join("") +
+      "</tr></thead><tbody>" +
+      rows.map(function (row) {
+        return '<tr><td class="avail-date-cell">' + esc(fmtDate(row.date)) + "</td>" +
+          teamUsers.map(function (u) {
+            var status = row.responses[u.id] || "";
+            var label = status === "yes" ? "Yes" : status === "no" ? "No" : "&ndash;";
+            var isMe = state.user && u.id === state.user.id;
+            return "<td>" +
+              (isMe
+                ? '<button type="button" class="avail-pill me ' + status + '" data-availdate="' + row.date + '" data-availstatus="' + status + '">' + label + "</button>"
+                : '<span class="avail-pill ' + status + '">' + label + "</span>") +
+              "</td>";
+          }).join("") +
+          "</tr>";
+      }).join("") +
+      "</tbody></table></div>";
+    $("availabilityWrap").innerHTML = html;
+  }
+  $("availabilityWrap").addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-availdate]");
+    if (!btn) return;
+    var date = btn.getAttribute("data-availdate");
+    var next = AVAIL_CYCLE[btn.getAttribute("data-availstatus") || ""];
+    btn.disabled = true;
+    apiFetch("PATCH", "/api/availability", { date: date, status: next || null })
+      .then(function (saved) {
+        var idx = availability.findIndex(function (a) { return a.id === saved.id; });
+        if (idx === -1) availability.push(saved); else availability[idx] = saved;
+        renderAvailability();
+      })
+      .catch(function (e2) { showToast(e2.message, true); btn.disabled = false; });
+  });
 
   /* ============================== LOG-A-SUNDAY MODAL ============================== */
   function songOptionsHtml(selectedId) {
@@ -3069,7 +3170,7 @@
     var initialEntries = editing ? editing.songs.slice() : (opts.preselectSongId ? [{ songId: opts.preselectSongId, key: (songs.find(function(s){return s.id===opts.preselectSongId;})||{}).defaultKey }] : [{}]);
     var html =
       '<div class="modal-backdrop" id="mb"><div class="modal" style="max-width:600px;">' +
-      "<h2>" + (editing ? "Edit Sunday" : "Log a Sunday") + "</h2>" +
+      "<h2>" + (editing ? "Edit set" : "Build a set") + "</h2>" +
       '<div class="field-row">' +
       '<div class="field"><label>Date</label><input type="date" id="s_date" value="' + esc(editing ? editing.date : nextSundayISO()) + '"></div>' +
       '<div class="field"><label>Worship leader (optional)</label><input type="text" id="s_leader" value="' + esc(editing ? editing.leader : "") + '"></div>' +
@@ -3080,7 +3181,7 @@
       '<div id="sModalMsg" style="font-size:0.82rem;color:var(--text-dim);min-height:18px;"></div>' +
       '<div class="modal-actions">' +
       '<button class="btn ghost" id="mCancel">Cancel</button>' +
-      '<button class="btn primary" id="mSave">' + (editing ? "Save changes" : "Save Sunday") + "</button>" +
+      '<button class="btn primary" id="mSave">' + (editing ? "Save changes" : "Save set") + "</button>" +
       "</div></div></div>";
     $("modalRoot").innerHTML = html;
     renumberEntryRows();
@@ -3158,6 +3259,7 @@
     $("view-library").hidden = tab !== "library";
     $("view-song").hidden = tab !== "song";
     $("view-tracker").hidden = tab !== "tracker";
+    $("view-availability").hidden = tab !== "availability";
     $("view-tagger").hidden = tab !== "tagger";
     $("view-setlist").hidden = tab !== "setlist";
     $("tabs").hidden = tab === "song" || tab === "tagger" || tab === "setlist";
