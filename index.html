@@ -3090,14 +3090,22 @@
       var row = availability.find(function (a) { return a.date === date; });
       return { date: date, responses: (row && row.responses) || {} };
     });
+    // Whoever's logged in gets the first column (right after Date), so they
+    // never have to scroll to find themselves; everyone else stays in the
+    // roster's usual alphabetical order.
+    var orderedUsers = teamUsers.slice();
+    if (state.user) {
+      var meIdx = orderedUsers.findIndex(function (u) { return u.id === state.user.id; });
+      if (meIdx > 0) orderedUsers.unshift(orderedUsers.splice(meIdx, 1)[0]);
+    }
     var html = '<div class="avail-table-wrap"><table class="avail-table"><thead><tr><th class="avail-date-col">Date</th>' +
-      teamUsers.map(function (u) {
+      orderedUsers.map(function (u) {
         return '<th class="' + (state.user && u.id === state.user.id ? "avail-me-col" : "") + '">' + esc(u.name) + "</th>";
       }).join("") +
       "</tr></thead><tbody>" +
       rows.map(function (row) {
         return '<tr><td class="avail-date-cell">' + esc(fmtDate(row.date)) + "</td>" +
-          teamUsers.map(function (u) {
+          orderedUsers.map(function (u) {
             var status = row.responses[u.id] || "";
             var label = status === "yes" ? "Yes" : status === "no" ? "No" : "&ndash;";
             var isMe = state.user && u.id === state.user.id;
