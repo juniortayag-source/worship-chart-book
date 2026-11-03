@@ -157,7 +157,7 @@ them; everyone sees the same songs, setlists, and chord charts.
 Junior's account has `isAdmin: true` in `api/_auth.js`, which shows an
 "Activity Log" button in the top bar (hidden for everyone else) listing
 what every account has done — songs and Sunday sets added, edited, or
-deleted, and logins — newest first. Nobody without `isAdmin: true` can see
+deleted; availability marked; and logins — newest first. Nobody without `isAdmin: true` can see
 it, even by calling the API directly (`api/activity.js` checks this
 server-side, not just in the UI). To give another account the same
 visibility, add `isAdmin: true` to their entry too (in `api/_auth.js`, or in
@@ -181,8 +181,8 @@ built for it before people can mark their availability.
 
 This uses a new table (`availability`), so if you already deployed this app
 before this feature existed, re-run `schema.sql` once more (safe to run
-again, same as step 5 above). Availability answers aren't shown in the
-Activity Log, the same as everyone's private annotations.
+again, same as step 5 above). Marking yourself available/unavailable (or
+clearing it) shows up in the Activity Log, same as everything else above.
 
 ### 7. Updating later
 

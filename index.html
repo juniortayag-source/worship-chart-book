@@ -1507,6 +1507,12 @@
       case "sunday_created": return name + " logged a new Sunday (" + (fmtDate(detail) || "no date") + ")";
       case "sunday_updated": return name + " edited the Sunday set for " + (fmtDate(detail) || "an unnamed date");
       case "sunday_deleted": return name + " deleted the Sunday set for " + (fmtDate(detail) || "an unnamed date");
+      case "availability_updated":
+        var availWhen = fmtDate((detail && detail.date) || "") || "an unnamed date";
+        var availStatus = detail && detail.status;
+        if (availStatus === "yes") return name + " marked themselves available for " + availWhen;
+        if (availStatus === "no") return name + " marked themselves unavailable for " + availWhen;
+        return name + " cleared their availability for " + availWhen;
       case "logged_in": return name + " logged in";
       case "activity_log_cleared": return name + " cleared the activity log";
       default: return name + " " + (entry.action || "did something").replace(/_/g, " ");
@@ -1514,7 +1520,7 @@
   }
   // Admin-only (see state.user.isAdmin / api/activity.js): a read-only
   // record of what every account has done — songs and Sunday sets added,
-  // edited, deleted, and logins — newest first.
+  // edited, deleted; availability marked; and logins — newest first.
   function openActivityLogModal() {
     var html =
       '<div class="modal-backdrop" id="mb"><div class="modal" style="max-width:560px;">' +

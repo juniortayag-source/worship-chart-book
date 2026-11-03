@@ -1,5 +1,6 @@
 const { getPool, rowToDoc } = require("./_db");
 const { requireUser } = require("./_auth");
+const { logActivity } = require("./_activity");
 
 // Each row is keyed by the Sunday's date itself (e.g. "2026-11-08"), not a
 // random id, so everyone's answer for that date lives in one place:
@@ -50,6 +51,7 @@ module.exports = async (req, res) => {
           "ON CONFLICT (id) DO UPDATE SET data = $2::jsonb",
         [date, JSON.stringify(data)]
       );
+      await logActivity(pool, user, "availability_updated", { date: date, status: status });
       res.status(200).json(Object.assign({ id: date }, data));
       return;
     }

@@ -3,7 +3,7 @@ const { requireUser } = require("./_auth");
 const { logActivity } = require("./_activity");
 
 // The Activity Log: who did what (songs/Sunday sets added, edited, deleted;
-// logins), newest first — and clearing it out. Restricted to admin accounts
+// availability marked; logins), newest first — and clearing it out. Restricted to admin accounts
 // (see api/_auth.js) — anyone else gets a 403 on either method, same as if
 // the route didn't exist. Entries themselves are written by the other
 // routes via api/_activity.js right after their own change succeeds;
