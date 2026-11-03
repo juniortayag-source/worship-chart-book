@@ -31,7 +31,7 @@ var DEFAULT_USERS = [
   { id: "david", name: "David", password: "MFBCworshipteam!!" },
   { id: "janine", name: "Janine", password: "MFBCworshipteam!!" },
   { id: "jayronn", name: "Jayronn", password: "MFBCworshipteam!!" },
-  { id: "junior", name: "Junior", password: "MFBCWorshipAdmin!", isAdmin: true },
+  { id: "junior", name: "Junior", password: "MFBCworshipteam!!", isAdmin: true },
   { id: "katrina", name: "Katreena", password: "MFBCworshipteam!!" },
   { id: "kevin", name: "Kevin", password: "MFBCworshipteam!!" },
   { id: "kirsten", name: "Kirsten", password: "MFBCworshipteam!!" },

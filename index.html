@@ -849,12 +849,25 @@
     if (isNaN(d)) return iso;
     return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   }
+  // A plain YYYY-MM-DD for a Date object using ITS LOCAL calendar date, not
+  // toISOString()'s UTC date. toISOString() converts to UTC first, so in the
+  // evening in any timezone behind UTC (e.g. Eastern Time) it silently rolls
+  // over to the next day — which is how "next Sunday" was coming out as a
+  // Monday after supper time. Always use this instead of
+  // `date.toISOString().slice(0, 10)` anywhere a calendar date (as opposed
+  // to an exact instant) is what's meant.
+  function localISODate(d) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, "0");
+    var day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  }
   function nextSundayISO() {
     var d = new Date();
     var day = d.getDay();
     var add = (7 - day) % 7;
     d.setDate(d.getDate() + add);
-    return d.toISOString().slice(0, 10);
+    return localISODate(d);
   }
   function uid() { return Math.random().toString(36).slice(2, 10); }
 
@@ -3022,7 +3035,7 @@
       }).join("") : '<div class="meta-line">Build a set to see trends here.</div>') +
       "</div></div>";
 
-    var todayISO = new Date().toISOString().slice(0, 10);
+    var todayISO = localISODate(new Date());
     var upcoming = sundays.filter(function (s) { return s.date && s.date > todayISO; }).slice().reverse();
     var history = sundays.filter(function (s) { return !s.date || s.date <= todayISO; });
 
@@ -3083,7 +3096,7 @@
     for (var i = 0; i < n; i++) {
       var d = new Date(first + "T12:00:00");
       d.setDate(d.getDate() + i * 7);
-      out.push(d.toISOString().slice(0, 10));
+      out.push(localISODate(d));
     }
     return out;
   }
