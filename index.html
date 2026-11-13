@@ -920,22 +920,23 @@
   // the old trick of triggering the browser's native Basic Auth dialog, the
   // login screen is a normal form: on submit we build the same kind of
   // "name:password" Basic Auth value by hand and send it once to confirm it,
-  // then keep it in state.authToken (and this tab's sessionStorage, so a
-  // reload doesn't force a re-login) and attach it ourselves to every
-  // request from then on — see apiFetch above.
+  // then keep it in state.authToken (and localStorage, so it survives
+  // closing the browser/tab entirely, not just a reload — someone stays
+  // logged in on their own device until they tap "Log out") and attach it
+  // ourselves to every request from then on — see apiFetch above.
   function persistSession(user, token) {
-    try { sessionStorage.setItem("mfbcAuth", JSON.stringify({ user: user, token: token })); } catch (e) {}
+    try { localStorage.setItem("mfbcAuth", JSON.stringify({ user: user, token: token })); } catch (e) {}
   }
   function restoreSession() {
     try {
-      var raw = sessionStorage.getItem("mfbcAuth");
+      var raw = localStorage.getItem("mfbcAuth");
       return raw ? JSON.parse(raw) : null;
     } catch (e) {
       return null;
     }
   }
   function clearSession() {
-    try { sessionStorage.removeItem("mfbcAuth"); } catch (e) {}
+    try { localStorage.removeItem("mfbcAuth"); } catch (e) {}
     state.user = null;
     state.authToken = null;
     state.role = "viewer";

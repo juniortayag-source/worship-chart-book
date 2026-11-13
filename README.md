@@ -146,8 +146,9 @@ If you add or rename someone this way, also update the `<option>` list in
 `index.html`'s login screen (search for `id="loginName"`) so their name
 shows up in the dropdown.
 
-A login is remembered for that browser tab (via `sessionStorage`) until
-"Log out" is clicked or the tab is closed — no need to sign in again on
+A login is remembered on that browser/device (via `localStorage`) until
+"Log out" is clicked — closing the tab, the browser, or the whole app
+doesn't sign you out, so there's no need to sign in again on
 every reload. Each person's notes and drawings on a Sunday's set (the
 Annotate bar: notes, shapes, arrows, and freehand drawing) are private to
 them; everyone sees the same songs, setlists, and chord charts.
